@@ -24,7 +24,7 @@
       if (e.isIntersecting && !seen.has(id)) { seen.add(id); track('section-view', { section: id }); }
     }), { threshold: 0.35 });
     [['.manifest', 'manifest'], ['.portal', 'portal'], ['.latest', 'latest-release'], ['.disco', 'discography'],
-     ['.live', 'live'], ['.about', 'about'], ['.contact', 'contact']].forEach(([sel, id]) => {
+     ['.live', 'live'], ['.about', 'about'], ['.contact', 'contact'], ['.attic', 'attic']].forEach(([sel, id]) => {
       const el = document.querySelector(sel); if (el) { el.dataset.track = id; io.observe(el); }
     });
 

@@ -8,7 +8,7 @@ const mouse = { x: -9999, y: -9999, active: false, down: false, hold: 0, blast: 
 const field = { order: 0, alpha: 1 };
 
 if (!reduce) {
-  const ignore = '.nav, p, h2, a, button, iframe, dl, .card, figure, input';
+  const ignore = '.nav, p, h2, a, button, iframe, dl, .card, figure, input, .attic';  // the attic has its own physics
   addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; }, { passive: true });
   document.addEventListener('pointerleave', () => { mouse.active = false; });
   addEventListener('pointerdown', e => {
@@ -220,8 +220,9 @@ if (window.gsap && window.ScrollTrigger && !reduce) {
 
   // Portal: a pinned circle opens onto a live photo while a word rushes past the camera.
   gsap.set('.portal__media', { clipPath: 'circle(6% at 50% 50%)' });
-  gsap.timeline({ scrollTrigger: { trigger: '.portal', start: 'top top', end: '+=180%', pin: true, scrub: 1 } })
-    .fromTo('.portal__media img', { scale: 1.9 }, { scale: 1, ease: 'none' }, 0)
+  gsap.timeline({ scrollTrigger: { trigger: '.portal', start: 'top top', end: '+=180%', pin: true, scrub: 1, invalidateOnRefresh: true } })
+    // photo ends smaller (more of the stage visible); a blurred copy behind fills the rest
+    .fromTo('.portal__media img', { scale: 1.6 }, { scale: () => innerWidth < 861 ? 1.3 : .82, ease: 'none' }, 0)
     .to('.portal__media', { clipPath: 'circle(75% at 50% 50%)', ease: 'power2.in' }, 0)
     .fromTo('.portal__word', { scale: .4, opacity: 0 }, { scale: 1, opacity: 1, ease: 'power1.out', duration: .45 }, 0)
     .to('.portal__word', { scale: 6, opacity: 0, filter: 'blur(14px)', ease: 'power2.in', duration: .55 }, .45)

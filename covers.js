@@ -48,12 +48,12 @@
     float edge = length(u - .5) * 1.25 + (nz - .5) * .9;             // noisy radial wipe
     float th = mix(-.45, 1.45, p);
     float m = 1. - smoothstep(th - .18, th, edge);                   // 1 → next cover
-    vec2 wob = vec2(0., vel * .12 * (nz - .5));
+    vec2 wob = vec2(0., vel * .06 * (nz - .5));                      // scroll-speed jitter (halved)
     vec2 ua = u + dir * s * .16 * nz + wob, ub = u - dir * s * .16 * (1. - nz) + wob;
-    vec2 off = dir * (s * .03 + vel * .04 + hover * .004);
+    vec2 off = dir * (s * .012 + vel * .015 + hover * .002);         // RGB split: subtle; the warp above stays full
     vec3 col = mix(rgb(ta, ua, off), rgb(tb, ub, off), m);
     col += vec3(.78, .2, .23) * smoothstep(.12, 0., abs(edge - th)) * s * .9;   // red seam
-    col += (hash(uv * 900. + time) - .5) * .05;                                  // grain
+    col += (hash(uv * 900. + time) - .5) * .03;                                  // grain
     gl_FragColor = vec4(col, 1.);
   }`;
   const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); return s; };
