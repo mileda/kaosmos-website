@@ -1,4 +1,4 @@
-// Attic window: a heavy sheer curtain (verlet cloth) in front of a night skylight over Istanbul.
+// Attic window: a heavy curtain (verlet cloth) in front of a night skylight over the city rooftops.
 // Moonlight shines through the fabric, leaks round its edges and throws beams into the room
 // that change as the curtain moves. Pulling it plays reverberant ambient sound; presets change the voice.
 (() => {
@@ -11,7 +11,7 @@
   const fab = mk(1, 1), fctx = fab.getContext('2d', { willReadFrequently: true });   // curtain layer (also read back for light coverage)
 
   let W, H, dpr, win, rod, moon, COLS, ROWS, P = [], C = [], restW;
-  let bgCan, skyCan, cloudCan, moonCan, glassCan, frameCan, vigCan;
+  let bgCan, skyCan, cloudCan, moonCan, glassCan, frameCan, vigCan, grainCan, beacons = [];
   let twinkle = [], drops = [], shoot = null, cover = new Float32Array(32);
   let visible = false, grabbed = null, gx = 0, gy = 0, lastX = 0, lastY = 0, speed = 0, travel = 0, openness = 0, played = false;
 
@@ -38,11 +38,11 @@
     const ww = Math.min(W * (phone ? .7 : .5), 480), wh = Math.min(ww * 1.32, H * (phone ? .55 : .6));
     win = { x: W / 2 - ww / 2, y: H * (phone ? .25 : .16), w: ww, h: wh, inset: ww * .07, ft: Math.max(10, ww * .045) };
     rod = { y: win.y - win.ft - 12, x0: win.x - ww * .24, x1: win.x + ww * 1.24 };
-    moon = { x: win.x + win.w * .7, y: win.y + win.h * .24, r: win.w * .062 };
+    moon = { x: win.x + win.w * .7, y: win.y + win.h * .24, r: win.w * .05 };
     seed = 7;
-    buildRoom(); buildSky(); buildClouds(); buildMoon(); buildGlass(); buildFrame(); buildVignette(); buildCloth();
-    twinkle = Array.from({ length: 36 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h * .7, s: .8 + rand() * 1.2, p: rand() * 6.3, f: .5 + rand() * 1.8 }));
-    drops = Array.from({ length: 9 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h, v: .2 + rand() * .5, l: 6 + rand() * 16 }));
+    buildRoom(); buildSky(); buildClouds(); buildMoon(); buildGlass(); buildFrame(); buildVignette(); buildGrain(); buildCloth();
+    twinkle = Array.from({ length: 16 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h * .5, s: .6 + rand() * .7, p: rand() * 6.3, f: .5 + rand() * 1.8 }));
+    drops = Array.from({ length: 5 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h, v: .2 + rand() * .5, l: 6 + rand() * 16 }));
   }
 
   // window glass shape: skylight trapezoid (top slightly narrower, it sits in the roof slope)
@@ -92,76 +92,124 @@
   }
 
   function buildSky() {
-    const sw = win.w, sh = win.h;
-    // band of the Milky Way crossing the window diagonally, with dust lanes
+    const sw = win.w, sh = win.h, mx = (moon.x - win.x) / sw, my = (moon.y - win.y) / sh, asp = sh / sw;
+    // night sky as a camera sees it over a big city: deep navy zenith, sodium/LED light dome at the horizon,
+    // moonlight scattered by the air, a Milky Way almost washed out by light pollution
     const lowres = noiseCanvas(sw / 2, sh / 2, (x, y) => {
-      const t = y;
-      let r = 4 + 10 * t, g = 6 + 16 * t, b = 14 + 34 * t;                         // deep blue gradient
-      const dx = .9, dy = -.95, len = Math.hypot(dx, dy), d = Math.abs((x - .08) * dy - (y - .95) * dx) / len;
-      const band = Math.exp(-((d / .16) ** 2)), n = fbm(x * 5 + 2, y * 5, 5), dust = fbm(x * 16 + 7, y * 16 + 3, 4);
-      let mw = band * (.3 + .7 * n) - band * sstep(.52, .7, dust) * .55; mw = Math.max(0, mw);
-      const core = Math.exp(-(((x - .55) / .22) ** 2 + ((y - .42) / .22) ** 2)) * band;
-      r += 75 * mw + 40 * core; g += 72 * mw + 26 * core; b += 98 * mw + 14 * core;
-      const hz = sstep(.62, 1, y);                                                // city glow near the horizon
-      r += 70 * hz; g += 34 * hz; b += 26 * hz;
-      return [r, g, b, 255];
+      const lp = sstep(.18, .95, y) ** 1.7;
+      let r = 2 + 7 * y, g = 5 + 10 * y, b = 13 + 21 * y;
+      r += 98 * lp; g += 66 * lp; b += 48 * lp;
+      const d = Math.abs((x - .08) * -.95 - (y - .95) * .9) / 1.31, band = Math.exp(-((d / .2) ** 2)) * (1 - lp);
+      const mw = Math.max(0, band * (.25 + .75 * fbm(x * 5 + 2, y * 5, 5)) - band * sstep(.55, .72, fbm(x * 14 + 7, y * 14 + 3, 4)) * .6);
+      r += 15 * mw; g += 17 * mw; b += 25 * mw;
+      const md = Math.hypot(x - mx, (y - my) * asp), sc = Math.exp(-md / .22) * .5 + Math.exp(-md / .06) * .45;
+      r += 42 * sc; g += 50 * sc; b += 64 * sc;
+      const n = (fbm(x * 40, y * 40, 2) - .5) * 4;                                   // break up 8-bit banding
+      return [r + n, g + n, b + n, 255];
     });
     skyCan = mk(sw * dpr, sh * dpr); const c = skyCan.getContext('2d');
     c.imageSmoothingEnabled = true; c.drawImage(lowres, 0, 0, skyCan.width, skyCan.height); c.scale(dpr, dpr);
-    // star field: denser inside the Milky Way, varied colour temperature
-    const cols = ['255,255,255', '200,215,255', '255,236,210', '255,214,180', '220,230,255'];
-    for (let i = 0; i < 1100; i++) {
-      const x = rand() * sw, y = rand() * sh * .85, nx = x / sw, ny = y / sh;
-      const d = Math.abs((nx - .08) * -.95 - (ny - .95) * .9) / 1.31, band = Math.exp(-((d / .16) ** 2));
-      if (rand() > .3 + band * .7) continue;
-      const s = rand() ** 3 * 1.6 + .35, a = .25 + rand() * .75;
-      c.fillStyle = `rgba(${cols[(rand() * cols.length) | 0]},${a})`; c.fillRect(x, y, s, s);
+    // stars: mostly faint, fading out into the glow near the horizon
+    const cols = ['255,250,245', '205,218,255', '255,232,205', '255,212,178'];
+    for (let i = 0; i < 520; i++) {
+      const x = rand() * sw, y = rand() * sh * .8, m = rand() ** 4, a = (.16 + .84 * m) * (1 - sstep(.3, .74, y / sh));
+      if (a < .05) continue;
+      c.fillStyle = `rgba(${cols[(rand() * cols.length) | 0]},${a})`; c.beginPath(); c.arc(x, y, .3 + m * .65, 0, 7); c.fill();
     }
-    for (let i = 0; i < 14; i++) {                                                 // a few bright stars with halos
-      const x = rand() * sw, y = rand() * sh * .7, r = 1 + rand() * 1.5;
-      const g = c.createRadialGradient(x, y, 0, x, y, r * 6); g.addColorStop(0, 'rgba(235,240,255,.9)'); g.addColorStop(.2, 'rgba(200,215,255,.25)'); g.addColorStop(1, 'rgba(200,215,255,0)');
-      c.fillStyle = g; c.fillRect(x - r * 6, y - r * 6, r * 12, r * 12);
+    for (let i = 0; i < 7; i++) {
+      const x = rand() * sw, y = rand() * sh * .5, r = 2.5 + rand() * 2.5;
+      const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(240,244,255,.85)'); g.addColorStop(.18, 'rgba(210,222,255,.22)'); g.addColorStop(1, 'rgba(210,222,255,0)');
+      c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
     }
-    // Istanbul silhouette: rooftops, a mosque with domes and minarets, scattered lit windows
-    const base = sh * .92;
-    c.fillStyle = '#05060a'; c.beginPath(); c.moveTo(0, sh);
-    for (let x = 0; x < sw;) { const w = 10 + rand() * 30, h = 6 + rand() * sh * .06; c.lineTo(x, base - h); c.lineTo(x + w, base - h); x += w; }
-    c.lineTo(sw, sh); c.fill();
-    const mx = sw * .3, dr = sw * .085;
-    c.beginPath(); c.ellipse(mx, base - sh * .05, dr, dr * .78, 0, Math.PI, 0); c.fill();                    // main dome
-    c.fillRect(mx - dr * 1.3, base - sh * .05, dr * 2.6, sh * .06);
-    [-1, 1].forEach(s => { c.beginPath(); c.ellipse(mx + s * dr * .95, base - sh * .045, dr * .45, dr * .38, 0, Math.PI, 0); c.fill(); });
-    [-1.6, -1.25, 1.25, 1.6].forEach((o, k) => {                                                            // minarets
-      const x = mx + o * dr, top = base - sh * (.2 + (k % 2) * .03);
-      c.fillRect(x - 2, top, 4, base - top); c.beginPath(); c.moveTo(x - 3, top); c.lineTo(x, top - 12); c.lineTo(x + 3, top); c.fill();
-      c.fillRect(x - 3.5, top + (base - top) * .3, 7, 2);
-    });
-    c.fillRect(mx - 1, base - sh * .05 - dr * .78 - 8, 2, 8);
-    for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(255,${170 + rand() * 50},${100 + rand() * 40},${.25 + rand() * .5})`; c.fillRect(rand() * sw, base - rand() * sh * .05, 1.2, 1.2); }
+
+    // ---- city: three depth layers of apartment blocks, softened by haze, with lit windows ----
+    beacons = [];
+    const HAZE = [96, 70, 60];
+    const veil = (y0, a) => {
+      const g = c.createLinearGradient(0, y0 - sh * .1, 0, y0 + sh * .02);
+      g.addColorStop(0, `rgba(${HAZE},0)`); g.addColorStop(1, `rgba(${HAZE},${a})`);
+      c.fillStyle = g; c.fillRect(0, y0 - sh * .1, sw, sh);
+    };
+    const layer = (base, hMin, hMax, wMin, wMax, shade, haze, litP, ws) => {
+      const fill = `rgb(${shade.map((v, i) => Math.round(v + (HAZE[i] - v) * haze))})`, lights = [];
+      c.fillStyle = fill;
+      for (let x = -rand() * 20; x < sw + 10;) {
+        const w = wMin + rand() * (wMax - wMin), h = hMin + rand() * (hMax - hMin), top = base - h, rt = rand();
+        c.fillRect(x, top, w + .6, sh - top);
+        if (rt < .3) { c.beginPath(); c.moveTo(x - .4, top + .2); c.lineTo(x + w * .5, top - w * (.14 + rand() * .16)); c.lineTo(x + w + .4, top + .2); c.fill(); }   // pitched roof
+        else if (rt < .55) { const bw = w * (.18 + rand() * .3), bx = x + rand() * (w - bw), bh = 1.5 + h * .1; c.fillRect(bx, top - bh, bw, bh); }       // stair / lift housing
+        if (rand() < .32) { const ax = x + 1 + rand() * (w - 2), ah = (3 + rand() * 8) * ws; c.fillRect(ax, top - ah, .6, ah); c.fillRect(ax - 1.8 * ws, top - ah * .72, 3.6 * ws, .5); }   // TV antenna
+        if (rand() < .18) { const cx = x + rand() * w; c.fillRect(cx, top - 3 * ws, 1.6 * ws, 3 * ws); }                                            // chimney
+        const fw = 1.05 * ws, fh = 1.45 * ws, gx = fw + 1.5 * ws, gy = fh + 2.1 * ws, p = litP * (.3 + rand() * 1.4);
+        for (let yy = top + 2.5 * ws; yy < base - 1; yy += gy) for (let xx = x + 1.6 * ws; xx < x + w - fw - 1; xx += gx) if (rand() < p) lights.push([xx, yy, fw, fh]);
+        x += w + (rand() < .14 ? 2 + rand() * 7 : 0);
+      }
+      for (const [lx, ly, fw, fh] of lights) {
+        const k = rand(), col = k < .68 ? `255,${176 + rand() * 40 | 0},${104 + rand() * 50 | 0}` : k < .9 ? '232,236,250' : '150,186,255';   // tungsten, LED, a TV
+        c.fillStyle = `rgba(${col},${(.3 + rand() * .6) * (1 - haze * .55)})`; c.fillRect(lx, ly, fw, fh);
+      }
+    };
+    layer(sh * .86, sh * .008, sh * .035, 5, 18, [22, 20, 24], .62, .11, .7);
+    // a telecom mast on the far hills with an aviation light
+    { const tx = sw * .17, ty = sh * .74, b0 = sh * .86; c.fillStyle = `rgb(${HAZE.map(v => v * .55 | 0)})`;
+      c.beginPath(); c.moveTo(tx - 2.2, b0); c.lineTo(tx - .5, ty + 6); c.lineTo(tx + .5, ty + 6); c.lineTo(tx + 2.2, b0); c.fill();
+      c.fillRect(tx - .35, ty, .7, 8); c.fillRect(tx - 1.6, ty + (b0 - ty) * .28, 3.2, 1.6);
+      beacons.push({ x: win.x + tx, y: win.y + ty, p: 0 }, { x: win.x + tx, y: win.y + ty + (b0 - ty) * .28, p: .5 }); }
+    veil(sh * .86, .38);
+    layer(sh * .915, sh * .025, sh * .08, 12, 38, [13, 12, 15], .22, .09, 1.15);
+    veil(sh * .915, .16);
+    // neighbouring tiled roofs right under the window
+    const roof = (x0, x1, eave, ridge, tilt) => {
+      c.fillStyle = '#08080b'; c.beginPath();
+      c.moveTo(x0, sh); c.lineTo(x0, eave); c.lineTo(x0 + (x1 - x0) * tilt, ridge); c.lineTo(x1, ridge + (eave - ridge) * .35); c.lineTo(x1, sh); c.fill();
+      c.save(); c.clip();
+      for (let k = 1; k < 14; k++) {                                                 // tile courses catching moonlight
+        const yy = ridge + k * (sh - ridge) / 12;
+        c.strokeStyle = `rgba(150,165,195,${.05 - k * .002})`; c.lineWidth = .7;
+        c.beginPath(); c.moveTo(x0, yy + (eave - ridge) * .4); c.lineTo(x1, yy); c.stroke();
+      }
+      c.restore();
+      c.strokeStyle = 'rgba(175,190,220,.22)'; c.lineWidth = 1;                      // ridge rim-lit from the moon side
+      c.beginPath(); c.moveTo(x0 + (x1 - x0) * tilt, ridge); c.lineTo(x1, ridge + (eave - ridge) * .35); c.stroke();
+    };
+    roof(-4, sw * .46, sh * .965, sh * .925, .55);
+    roof(sw * .58, sw + 4, sh * .975, sh * .945, .25);
+    { const cx = sw * .3, cy = sh * .9, cw = sw * .04, chh = sh * .045;               // brick chimney with two pots
+      c.fillStyle = '#0b0a0c'; c.fillRect(cx, cy, cw, chh); c.fillRect(cx - 1.5, cy - 2, cw + 3, 2.5);
+      c.fillRect(cx + cw * .15, cy - 7, cw * .25, 5); c.fillRect(cx + cw * .58, cy - 6, cw * .25, 4);
+      c.fillStyle = 'rgba(170,185,215,.2)'; c.fillRect(cx + cw - 1, cy - 2, 1, chh + 2); }
+    { const ax = sw * .78, ay = sh * .9;                                           // rooftop antenna
+      c.fillStyle = '#09090c'; c.fillRect(ax, ay, .9, sh * .05); [0, 4, 8].forEach((o, i) => c.fillRect(ax - 7 + i, ay + o, 15 - i * 2, .7)); }
   }
 
   function buildClouds() {
-    cloudCan = noiseCanvas(win.w, win.h * .5, (x, y) => {
-      const n = fbm(x * 4 + 11, y * 7, 6), a = sstep(.48, .78, n) * Math.sin(Math.PI * y) ** 1.2;
-      const lit = 1 - y * .6;                                                        // moon lights cloud tops
-      return [60 + 70 * lit, 66 + 74 * lit, 86 + 84 * lit, a * 150];
+    // moonlit stratocumulus: domain-warped fbm, seamless in x so it can drift forever
+    const cw = Math.round(win.w / 1.4), ch = Math.round(win.h * .55 / 1.4);
+    cloudCan = noiseCanvas(cw, ch, (x, y) => {
+      const f = u => { const w = fbm(u * 3 + 5, y * 3, 3) * .7; return fbm((u + w) * 3.1 + 11, y * 6.2 + w * 2, 6); };
+      let n = f(x) * (1 - x) + f(x - 1) * x; n = .5 + (n - .5) * (1 + .5 * Math.sin(Math.PI * x));
+      const dens = sstep(.47, .76, n) * Math.sin(Math.PI * y) ** 1.1;
+      if (dens <= .002) return [0, 0, 0, 0];
+      const v = .18 + .26 * (1 - y) + .4 * (1 - dens), city = y * dens;          // thin edges glow, bellies warmed by the city
+      return [26 + 92 * v + 34 * city, 29 + 96 * v + 18 * city, 40 + 104 * v + 8 * city, dens * 225];
     });
   }
 
   function buildMoon() {
     const R = moon.r, S = Math.ceil(R * 2 * dpr) + 4;
-    moonCan = mk(S, S); const c = moonCan.getContext('2d'), m = (S) / 2, r = R * dpr;
+    moonCan = mk(S, S); const c = moonCan.getContext('2d'), m = S / 2, r = R * dpr;
     const tex = noiseCanvas(S, S, (x, y) => {
       const dx = (x - .5) * 2, dy = (y - .5) * 2, rr = dx * dx + dy * dy;
       if (rr > 1) return [0, 0, 0, 0];
-      const maria = sstep(.5, .66, fbm(x * 4 + 30, y * 4, 5)), crater = fbm(x * 22, y * 22, 3);
-      const limb = Math.sqrt(1 - rr) * .35 + .65, v = (232 - maria * 55 - crater * 18) * limb;
-      return [v, v * .985, v * .94, 255];
+      const maria = sstep(.47, .6, fbm(x * 3 + 30, y * 3 + 4, 5)), crater = fbm(x * 26, y * 26, 3), fine = fbm(x * 70, y * 70, 2);
+      const limb = .82 + .18 * Math.sqrt(1 - rr), v = (240 - maria * 72 - (crater - .5) * 34 - (fine - .5) * 16) * limb;
+      return [v, v * .978, v * .93, 255];
     });
     c.save(); c.beginPath(); c.arc(m, m, r, 0, 7); c.clip(); c.drawImage(tex, 0, 0);
-    // waxing crescent: shadow over most of the disc, earthshine keeps the dark side faintly visible
-    c.globalCompositeOperation = 'source-atop'; c.filter = `blur(${Math.max(1, r * .06)}px)`;
-    c.fillStyle = 'rgba(8,10,18,.9)'; c.beginPath(); c.ellipse(m - r * .42, m + r * .1, r * 1.02, r * 1.05, -.25, 0, 7); c.fill();
+    c.fillStyle = 'rgba(255,255,250,.5)'; c.beginPath(); c.arc(m + r * .35, m + r * .55, Math.max(.6, r * .05), 0, 7); c.fill();   // bright young crater
+    // waxing crescent: soft terminator, earthshine keeps the dark side faintly visible
+    c.globalCompositeOperation = 'source-atop'; c.filter = `blur(${Math.max(1, r * .08)}px)`;
+    c.fillStyle = 'rgba(10,13,22,.93)'; c.beginPath(); c.ellipse(m - r * .42, m + r * .1, r * 1.02, r * 1.05, -.25, 0, 7); c.fill();
     c.restore();
   }
 
@@ -170,20 +218,27 @@
     const w = win.w, h = win.h;
     // condensation creeping in from the frame, heavier at the bottom
     const fog = noiseCanvas(w / 3, h / 3, (x, y) => {
-      const edge = Math.min(x, 1 - x, y * 1.4, (1 - y) * .6), n = fbm(x * 8, y * 8, 4);
-      return [150, 165, 190, sstep(.16, 0, edge - n * .08) * 60];
+      const edge = Math.min(x, 1 - x, y * 1.4, (1 - y) * .55), n = fbm(x * 8, y * 8, 4);
+      return [150, 162, 185, sstep(.13, 0, edge - n * .07) * 46];
     });
     c.drawImage(fog, 0, 0, w, h);
-    // diagonal reflection on the pane
-    const g = c.createLinearGradient(0, 0, w, h); g.addColorStop(.25, 'rgba(255,255,255,0)'); g.addColorStop(.32, 'rgba(255,255,255,.035)'); g.addColorStop(.4, 'rgba(255,255,255,0)');
+    // dust and dried rain spots, only faintly visible
+    const dust = noiseCanvas(w / 1.5, h / 1.5, (x, y) => [175, 185, 205, sstep(.6, .82, fbm(x * 22 + 3, y * 22, 4)) * sstep(.42, .7, fbm(x * 3 + 40, y * 3, 3)) * 20]);
+    c.drawImage(dust, 0, 0, w, h);
+    // faint reflection sweep across the pane
+    const g = c.createLinearGradient(0, 0, w, h); g.addColorStop(.22, 'rgba(255,255,255,0)'); g.addColorStop(.3, 'rgba(220,230,255,.025)'); g.addColorStop(.42, 'rgba(255,255,255,0)');
     c.fillStyle = g; c.fillRect(0, 0, w, h);
-    // beaded droplets: dark body, refracted bright rim, specular dot
-    for (let i = 0; i < 190; i++) {
-      const x = rand() * w, y = rand() * h, r = .5 + rand() ** 2 * 2.6;
-      c.fillStyle = 'rgba(6,9,16,.32)'; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
-      c.strokeStyle = 'rgba(190,205,235,.18)'; c.lineWidth = .6; c.beginPath(); c.arc(x, y, r, .4, 2.6); c.stroke();
-      c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(x - r * .35, y - r * .45, .8, .8);
+    // small beaded droplets: dark lens, refracted bright lower rim, specular glint
+    for (let i = 0; i < 110; i++) {
+      const x = rand() * w, y = rand() * h, r = .4 + rand() ** 2.5 * 2.1;
+      c.fillStyle = 'rgba(6,9,16,.26)'; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+      c.strokeStyle = 'rgba(190,205,235,.16)'; c.lineWidth = .5; c.beginPath(); c.arc(x, y, r * .9, .5, 2.6); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,.45)'; c.fillRect(x - r * .35, y - r * .45, .7, .7);
     }
+  }
+
+  function buildGrain() {
+    grainCan = noiseCanvas(220, 220, () => { const v = 128 + (rand() - .5) * 120; return [v, v, v, 255]; });
   }
 
   function buildFrame() {
@@ -198,6 +253,8 @@
     c.save(); c.shadowColor = 'rgba(0,0,0,.7)'; c.shadowBlur = 24; c.shadowOffsetY = 8;
     c.fillStyle = pat; winPath(c, ft); c.fill(); c.restore();
     c.globalCompositeOperation = 'destination-out'; winPath(c, 0); c.fill(); c.globalCompositeOperation = 'source-over';   // open the glass
+    c.save(); winPath(c, 0); c.clip();                                            // ambient occlusion where the glass meets the frame
+    c.shadowColor = 'rgba(0,0,0,.7)'; c.shadowBlur = ft * 1.3; c.strokeStyle = '#000'; c.lineWidth = ft * 2; winPath(c, ft); c.stroke(); c.restore();
     // inner reveal lit by the moon on the left/top, dark on the right
     c.lineWidth = 2;
     c.strokeStyle = 'rgba(190,205,235,.28)'; c.beginPath(); c.moveTo(win.x + 1, win.y + win.h); c.lineTo(win.x + win.inset + 1, win.y + 1); c.lineTo(win.x + win.w - win.inset, win.y + 1); c.stroke();
@@ -205,9 +262,11 @@
     c.strokeStyle = 'rgba(255,230,200,.06)'; c.lineWidth = 1; winPath(c, ft); c.stroke();
     // mullions
     const mw = Math.max(4, ft * .45);
-    c.fillStyle = pat;
+    c.save(); winPath(c, 0); c.clip(); c.fillStyle = pat; c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = mw * 1.6;
     c.fillRect(win.x + win.w / 2 - mw / 2, win.y, mw, win.h);
-    c.fillRect(win.x + win.inset * .5, win.y + win.h * .5 - mw / 2, win.w - win.inset, mw);
+    c.fillRect(win.x, win.y + win.h * .5 - mw / 2, win.w, mw);
+    c.restore();
+    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(win.x + win.w / 2 + mw / 2 - 1.5, win.y, 1.5, win.h); c.fillRect(win.x, win.y + win.h * .5 + mw / 2 - 1.5, win.w, 1.5);
     c.fillStyle = 'rgba(190,205,235,.18)'; c.fillRect(win.x + win.w / 2 - mw / 2, win.y, 1, win.h); c.fillRect(win.x + win.inset * .5, win.y + win.h * .5 - mw / 2, win.w - win.inset, 1);
     // sill
     const sy = win.y + win.h + ft;
@@ -230,7 +289,7 @@
       const base = P.length;
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
         const x = x0 + c * restW, y = rod.y + r * sy;
-        P.push({ x, y, px: x, py: y, ring: r === 0, panel, r, c, m: r >= ROWS - 3 ? 1.7 : 1 });   // weighted hem
+        P.push({ x, y, px: x, py: y, ring: r === 0, panel, r, c, m: r >= ROWS - 3 ? 2.2 : 1.1 });   // weighted hem
       }
       const at = (r, c) => P[base + r * COLS + c];
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
@@ -274,38 +333,47 @@
   function drawSky(t) {
     ctx.save(); winPath(ctx); ctx.clip();
     ctx.drawImage(skyCan, win.x, win.y, win.w, win.h);
-    for (const s of twinkle) {
-      ctx.globalAlpha = reduce ? .6 : .25 + .75 * (Math.sin(t * .0011 * s.f + s.p) * .5 + .5) ** 2;
-      ctx.fillStyle = '#eef2ff'; ctx.fillRect(s.x, s.y, s.s, s.s);
+    for (const s of twinkle) {                                                    // atmospheric scintillation
+      ctx.globalAlpha = reduce ? .35 : .1 + .45 * (Math.sin(t * .0013 * s.f + s.p) * .5 + .5) ** 3;
+      ctx.fillStyle = '#eef2ff'; ctx.beginPath(); ctx.arc(s.x, s.y, s.s * .5, 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
-    // moon halo + disc
-    const halo = ctx.createRadialGradient(moon.x, moon.y, moon.r * .8, moon.x, moon.y, moon.r * 9);
-    halo.addColorStop(0, 'rgba(215,225,245,.32)'); halo.addColorStop(.25, 'rgba(160,180,220,.1)'); halo.addColorStop(1, 'rgba(160,180,220,0)');
-    ctx.fillStyle = halo; ctx.fillRect(win.x, win.y, win.w, win.h);
-    ctx.drawImage(moonCan, moon.x - moonCan.width / dpr / 2, moon.y - moonCan.height / dpr / 2, moonCan.width / dpr, moonCan.height / dpr);
-    // drifting clouds (two passes for parallax)
-    const off = reduce ? 0 : (t * .006) % win.w;
-    ctx.globalAlpha = .75;
-    ctx.drawImage(cloudCan, win.x + off, win.y + win.h * .12, win.w, win.h * .5);
-    ctx.drawImage(cloudCan, win.x + off - win.w, win.y + win.h * .12, win.w, win.h * .5);
+    for (const b of beacons) {                                                    // aviation lights on the mast
+      const on = reduce ? .6 : Math.max(0, Math.sin(t * .0028 + b.p * 6.28)) ** 6;
+      if (on < .02) continue;
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 6); g.addColorStop(0, `rgba(255,70,50,${on})`); g.addColorStop(.25, `rgba(255,40,30,${on * .35})`); g.addColorStop(1, 'rgba(255,40,30,0)');
+      ctx.fillStyle = g; ctx.fillRect(b.x - 6, b.y - 6, 12, 12);
+    }
+    const md = moonCan.width / dpr;
+    ctx.drawImage(moonCan, moon.x - md / 2, moon.y - md / 2, md, md);
+    // drifting clouds (seamless tile), then the moon's aureole lights whatever cloud is near it
+    const off = reduce ? 0 : (t * .004) % win.w;
+    ctx.globalAlpha = .92;
+    ctx.drawImage(cloudCan, win.x + off, win.y + win.h * .1, win.w, win.h * .55);
+    ctx.drawImage(cloudCan, win.x + off - win.w, win.y + win.h * .1, win.w, win.h * .55);
     ctx.globalAlpha = 1;
-    if (!reduce) {                                                               // occasional shooting star
-      if (!shoot && Math.random() < .0015) shoot = { x: win.x + Math.random() * win.w * .6, y: win.y + Math.random() * win.h * .3, life: 1 };
+    ctx.globalCompositeOperation = 'lighter';
+    const halo = ctx.createRadialGradient(moon.x, moon.y, moon.r * .9, moon.x, moon.y, moon.r * 7);
+    halo.addColorStop(0, 'rgba(190,205,230,.22)'); halo.addColorStop(.3, 'rgba(120,140,180,.06)'); halo.addColorStop(1, 'rgba(120,140,180,0)');
+    ctx.fillStyle = halo; ctx.fillRect(moon.x - moon.r * 7, moon.y - moon.r * 7, moon.r * 14, moon.r * 14);
+    ctx.globalAlpha = .07; ctx.drawImage(moonCan, moon.x - md / 2 + 2.5, moon.y - md / 2 + 4, md, md);   // ghost from the second pane of the double glazing
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    if (!reduce) {                                                               // rare meteor
+      if (!shoot && Math.random() < .0008) shoot = { x: win.x + Math.random() * win.w * .6, y: win.y + Math.random() * win.h * .3, life: 1 };
       if (shoot) {
-        const g = ctx.createLinearGradient(shoot.x, shoot.y, shoot.x - 60, shoot.y - 22);
-        g.addColorStop(0, `rgba(255,255,255,${shoot.life})`); g.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.strokeStyle = g; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(shoot.x, shoot.y); ctx.lineTo(shoot.x - 60, shoot.y - 22); ctx.stroke();
-        shoot.x += 6; shoot.y += 2.2; shoot.life -= .03; if (shoot.life <= 0) shoot = null;
+        const g = ctx.createLinearGradient(shoot.x, shoot.y, shoot.x - 50, shoot.y - 18);
+        g.addColorStop(0, `rgba(255,255,255,${shoot.life * .8})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = g; ctx.lineWidth = .9; ctx.beginPath(); ctx.moveTo(shoot.x, shoot.y); ctx.lineTo(shoot.x - 50, shoot.y - 18); ctx.stroke();
+        shoot.x += 7; shoot.y += 2.5; shoot.life -= .04; if (shoot.life <= 0) shoot = null;
       }
     }
     ctx.drawImage(glassCan, win.x, win.y, win.w, win.h);
     for (const d of drops) {                                                      // drops running down the glass
       if (!reduce) { d.y += d.v; if (d.y > win.y + win.h) { d.y = win.y - 10; d.x = win.x + Math.random() * win.w; } }
       const g = ctx.createLinearGradient(d.x, d.y - d.l, d.x, d.y);
-      g.addColorStop(0, 'rgba(190,205,235,0)'); g.addColorStop(1, 'rgba(190,205,235,.35)');
-      ctx.strokeStyle = g; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(d.x, d.y - d.l); ctx.lineTo(d.x, d.y); ctx.stroke();
-      ctx.fillStyle = 'rgba(230,240,255,.6)'; ctx.fillRect(d.x - .6, d.y - 1, 1.2, 1.2);
+      g.addColorStop(0, 'rgba(190,205,235,0)'); g.addColorStop(1, 'rgba(190,205,235,.22)');
+      ctx.strokeStyle = g; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(d.x, d.y - d.l); ctx.lineTo(d.x, d.y); ctx.stroke();
+      ctx.fillStyle = 'rgba(230,240,255,.5)'; ctx.fillRect(d.x - .5, d.y - 1, 1, 1);
     }
     ctx.restore();
   }
@@ -328,7 +396,7 @@
     const n = cover.length, top = win.y + win.h * .35, bottom = win.y + win.h, floor = H * .97, shift = -win.w * .42;
     for (let i = 0; i < n; i++) {
       const x0 = win.x + win.w * i / n, x1 = win.x + win.w * (i + 1) / n;
-      const pass = 1 - cover[i] * .78;                                             // the curtain dims what passes
+      const pass = 1 - cover[i] * .9;                                             // the curtain dims what passes
       const mullion = Math.abs((x0 + x1) / 2 - (win.x + win.w / 2)) < win.w / n * .6 ? .35 : 1;
       const a = .045 * pass * mullion;
       // volumetric shaft through the room
@@ -337,8 +405,9 @@
       ctx.fillStyle = g; ctx.beginPath();
       ctx.moveTo(x0, bottom); ctx.lineTo(x1 + .5, bottom); ctx.lineTo(x1 + shift * 1.1, floor); ctx.lineTo(x0 + shift * 1.1, floor); ctx.fill();
       // pool of moonlight on the floor, the window's shape skewed across the planks
-      ctx.fillStyle = `rgba(165,185,225,${.11 * pass * mullion})`;
-      const fy0 = H * .875, fy1 = H * .975;
+      const fy0 = H * .875, fy1 = H * .975, fg = ctx.createLinearGradient(0, fy0, 0, fy1);   // soft penumbra: fades with distance
+      fg.addColorStop(0, `rgba(165,185,225,${.075 * pass * mullion})`); fg.addColorStop(.6, `rgba(165,185,225,${.04 * pass * mullion})`); fg.addColorStop(1, 'rgba(165,185,225,0)');
+      ctx.fillStyle = fg;
       ctx.beginPath(); ctx.moveTo(x0 + shift * .8, fy0); ctx.lineTo(x1 + shift * .8 + .5, fy0); ctx.lineTo(x1 + shift * 1.2, fy1); ctx.lineTo(x0 + shift * 1.2, fy1); ctx.fill();
     }
     ctx.restore();
@@ -353,30 +422,43 @@
 
     if (fab.width !== cv.width || fab.height !== cv.height) { fab.width = cv.width; fab.height = cv.height; }
     fctx.setTransform(dpr, 0, 0, dpr, 0, 0); fctx.clearRect(0, 0, W, H);
-    const reach = win.w * .6;
+    const reach = win.w * .6, L = new Float32Array(ROWS * COLS);
+    const shade = l => `rgb(${26 + l * 178 | 0},${28 + l * 182 | 0},${34 + l * 190 | 0})`;   // heavy linen in cool moonlight
+    fctx.lineJoin = 'round';
     for (let panel = 0; panel < 2; panel++) {
       const base = panel * ROWS * COLS, at = (r, c) => P[base + r * COLS + c];
+      // lightness per vertex, then smooth gradients across each quad: soft rounded pleats instead of flat facets
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        const p = at(r, c), last = c === COLS - 1, q = at(r, last ? c - 1 : c + 1);
+        const sq = Math.min(1, Math.hypot(q.x - p.x, q.y - p.y) / restW);           // <1: gathered into folds
+        const thick = 1 / (.22 + .78 * sq);                                      // folds stack fabric → less light through
+        const back = (.18 + .82 * inWindow(p.x, p.y)) * (.35 + .65 * Math.exp(-Math.hypot(p.x - moon.x, p.y - moon.y) / reach));
+        const trans = Math.min(1, back / thick) * .58;                          // dense weave: only part of the light gets through
+        const tilt = (q.y - p.y) / restW * (last ? -1 : 1);
+        const fold = (1 - sq) * ((c % 2) ? .75 : -.75) + tilt * .35;
+        let l = .1 + trans + fold * .2;
+        if (r >= ROWS - 4) l *= .8;                                              // doubled hem
+        l *= 1 + .03 * Math.sin(c * 2.3 + r * .15);
+        L[r * COLS + c] = Math.max(.03, Math.min(1, l));
+      }
+      fctx.lineWidth = .9;
       for (let r = 0; r < ROWS - 1; r++) for (let c = 0; c < COLS - 1; c++) {
         const a = at(r, c), b = at(r, c + 1), d = at(r + 1, c + 1), e = at(r + 1, c);
-        const cx = (a.x + b.x + d.x + e.x) / 4, cy = (a.y + b.y + d.y + e.y) / 4;
-        const sq = Math.min(1, Math.hypot(b.x - a.x, b.y - a.y) / restW);           // <1: gathered into folds
-        const thick = 1 / (.3 + .7 * sq);                                        // folds stack fabric → less light through
-        const back = (.22 + .78 * inWindow(cx, cy)) * (.35 + .65 * Math.exp(-Math.hypot(cx - moon.x, cy - moon.y) / reach));
-        const trans = Math.min(1, back / thick);
-        const tilt = (b.y - a.y) / restW;                                         // fold faces turn towards/away from light
-        const fold = (1 - sq) * ((c % 2) ? .6 : -.6) + tilt * .35;
-        let l = .14 + trans * .92 + fold * .22;
-        if (r >= ROWS - 4) l *= .82;                                             // doubled hem
-        l *= 1 + .035 * Math.sin(c * 2.3 + r * .15);                             // weave
-        l = Math.max(.04, Math.min(1.05, l));
-        const R = 30 + l * 192, G = 32 + l * 196, B = 38 + l * 204;              // cool moonlit white
-        fctx.fillStyle = fctx.strokeStyle = `rgb(${R | 0},${G | 0},${B | 0})`;
-        fctx.lineWidth = 1;
+        const la = (L[r * COLS + c] + L[(r + 1) * COLS + c]) / 2, lb = (L[r * COLS + c + 1] + L[(r + 1) * COLS + c + 1]) / 2;
+        const g = fctx.createLinearGradient((a.x + e.x) / 2, (a.y + e.y) / 2, (b.x + d.x) / 2, (b.y + d.y) / 2);
+        g.addColorStop(0, shade(la)); g.addColorStop(1, shade(lb));
+        fctx.fillStyle = fctx.strokeStyle = g;
         fctx.beginPath(); fctx.moveTo(a.x, a.y); fctx.lineTo(b.x, b.y); fctx.lineTo(d.x, d.y); fctx.lineTo(e.x, e.y); fctx.closePath();
         fctx.fill(); fctx.stroke();
       }
+      // stitched side hems and the weighted bottom hem read as a thicker edge
+      fctx.strokeStyle = 'rgba(0,0,0,.28)'; fctx.lineWidth = 2.2;
+      [0, COLS - 1].forEach(c => { fctx.beginPath(); for (let r = 0; r < ROWS; r++) { const p = at(r, c); r ? fctx.lineTo(p.x, p.y) : fctx.moveTo(p.x, p.y); } fctx.stroke(); });
+      fctx.lineWidth = 3; fctx.beginPath(); for (let c = 0; c < COLS; c++) { const p = at(ROWS - 1, c); c ? fctx.lineTo(p.x, p.y) : fctx.moveTo(p.x, p.y); } fctx.stroke();
+      fctx.strokeStyle = 'rgba(0,0,0,.14)'; fctx.lineWidth = 1; fctx.beginPath();
+      for (let c = 0; c < COLS; c++) { const p = at(ROWS - 4, c); c ? fctx.lineTo(p.x, p.y) : fctx.moveTo(p.x, p.y); } fctx.stroke();
     }
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = .62; ctx.drawImage(fab, 0, 0); ctx.restore();
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = .78; ctx.drawImage(fab, 0, 0); ctx.restore();
 
     // light leaking round the fabric's edges where they cross the window
     // Only edges that border open glass leak light (not where the panels overlap each other).
@@ -557,6 +639,10 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(frameCan, 0, 0); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawLight(); drawCurtain();
     ctx.drawImage(vigCan, 0, 0, W, H);
+    // photographic grain over the whole frame (keeps the dark gradients from banding)
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = .09;
+    const gp = ctx.createPattern(grainCan, 'repeat'), ox = reduce ? 0 : Math.random() * 220 | 0, oy = reduce ? 0 : Math.random() * 220 | 0;
+    ctx.translate(-ox, -oy); ctx.fillStyle = gp; ctx.fillRect(0, 0, cv.width + 220, cv.height + 220); ctx.restore();
   }
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }, { rootMargin: '200px' }).observe(sec);
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 250); });
