@@ -1,4 +1,7 @@
 // KAOSMOS — chaos → cosmos.
+// Always open at the top (restored mid-page scroll breaks the pinned scroll scenes); #links still work.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+if (!location.hash) scrollTo(0, 0);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = matchMedia('(pointer: fine)').matches;
 document.getElementById('year').textContent = new Date().getFullYear();

@@ -296,8 +296,6 @@ main, .foot { position: relative; z-index: 1; }
 .attic--near .attic__scene { cursor: grab; }
 .attic--holding .attic__scene { cursor: grabbing; }
 .attic__label { position: absolute; top: 96px; left: var(--pad); margin: 0; pointer-events: none; }
-.attic__hint { position: absolute; bottom: 32px; left: 0; right: 0; text-align: center; margin: 0; pointer-events: none; color: #b5b3ae; transition: opacity .6s; }
-.attic--holding .attic__hint { opacity: 0; }
 
 /* portal photo: smaller, with its own light "extended" by a blurred copy behind it */
 .portal__media { background: #0b0c0e; }
@@ -311,4 +309,18 @@ main, .foot { position: relative; z-index: 1; }
   position: absolute; inset: 0; margin: auto; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: initial;
   -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 60%, transparent 100%);
           mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 60%, transparent 100%);
+}
+.attic__presets { position: absolute; bottom: 28px; left: 0; right: 0; display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; padding: 0 var(--pad); }
+.attic__presets .label { margin: 0 6px 0 0; }
+.attic__preset {
+  background: rgba(15,16,18,.55); border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+  font: 400 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; padding: 9px 14px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: color .3s, border-color .3s, background .3s;
+}
+.attic__preset:hover { color: var(--text); border-color: var(--text); }
+.attic__preset[aria-pressed="true"] { color: var(--text); border-color: var(--accent); background: rgba(200,50,58,.18); }
+@media (max-width: 600px) {
+  .attic__presets { bottom: 16px; gap: 6px; }
+  .attic__presets .label { display: none; }
+  .attic__preset { padding: 8px 10px; font-size: 11px; letter-spacing: .08em; }
 }

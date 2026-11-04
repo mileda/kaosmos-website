@@ -22,7 +22,7 @@ const TR = {
   foot: 'KAOSMOS · İstanbul',
   gateLabel: '// sinyal geliyor', gateOn: 'Sesle gir', gateOff: 'Sessiz gir', gateNote: 'kulaklıkla dinlemeniz önerilir',
   sound: 'ses',
-  atticLabel: '// çatı katı', atticHint: 'perdeyi çekiştir · ses açık',
+  atticLabel: '// çatı katı', atticTone: '// ses rengi',
 };
 const TR_TYPES = { compilation: 'derleme', single: 'tekli', split: 'ortak albüm', debut: 'ilk albüm', tracks: 'parça' };
 
