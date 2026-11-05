@@ -1,0 +1,101 @@
+/* KAOSMOS galaxy home page (on top of style.css) */
+body.galaxy { background: #020306; overflow: hidden; height: 100svh; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#space { position: fixed; inset: 0; width: 100vw; height: 100svh; display: block; touch-action: none; cursor: grab; outline: none; }
+.galaxy .grain { display: none; }
+
+.g-head {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  padding: 26px var(--pad); font: 400 11px var(--mono); letter-spacing: .2em; text-transform: uppercase;
+  background: linear-gradient(rgba(2,3,6,.7), rgba(2,3,6,0)); pointer-events: none;
+}
+.g-head a { color: var(--text); text-decoration: none; pointer-events: auto; transition: color .3s; }
+.g-head a:hover, .g-head a:focus-visible { color: var(--accent); }
+.g-head nav { display: flex; gap: clamp(16px, 3vw, 40px); }
+.g-mark { letter-spacing: .5em; }
+.g-list { color: var(--muted) !important; }
+
+.g-intro {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4; text-align: center; pointer-events: none;
+  opacity: 0; transition: opacity .6s; width: max-content; max-width: 92vw;
+}
+.g-intro .label { letter-spacing: .4em; color: #d9c7b9; margin: 0 0 6px; }
+.g-intro h1 {
+  margin: 0; font: 200 clamp(52px, 11vw, 170px)/1 var(--sans); letter-spacing: .2em; padding-left: .2em; color: #f1ece4;
+  text-shadow: 0 0 40px rgba(0,0,0,.65), 0 0 2px rgba(0,0,0,.6);
+}
+.g-intro__line { margin: 14px 0 0; font: italic 300 clamp(18px, 2vw, 26px) var(--sans); color: #d2bfb0; text-shadow: 0 0 24px #000; }
+
+/* world labels, positioned from 3D each frame */
+.g-labels { position: fixed; inset: 0; z-index: 5; pointer-events: none; transition: opacity .5s; }
+.g-labels.hidden { opacity: 0; }
+.g-labels.hidden .orb { pointer-events: none; }
+.orb {
+  position: absolute; left: 0; top: 0; pointer-events: auto; background: none; border: 0; padding: 6px 10px 6px 14px; margin: 0;
+  display: grid; grid-template-columns: auto auto; column-gap: 10px; align-items: baseline; text-align: left; color: var(--text); cursor: pointer;
+  font: 400 11px var(--mono); letter-spacing: .2em; text-transform: uppercase; white-space: nowrap;
+  translate: -50% -100%; transition: opacity .4s; text-shadow: 0 0 10px #000, 0 0 3px #000;
+}
+.orb::before { content: ''; position: absolute; left: 0; top: 50%; width: 5px; height: 5px; margin-top: -2px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.orb__n { color: var(--muted); }
+.orb__name { font-size: 13px; }
+.orb__note { grid-column: 2; font-size: 9px; letter-spacing: .14em; color: var(--muted); text-transform: none; max-height: 0; opacity: 0; overflow: hidden; transition: max-height .4s, opacity .4s; }
+.orb.on .orb__note, .orb:focus-visible .orb__note { max-height: 20px; opacity: 1; }
+.orb.on .orb__name, .orb:focus-visible .orb__name { color: #fff; }
+.orb:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+.g-hint { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 6; margin: 0; color: #8d8f96; pointer-events: none; text-align: center; white-space: nowrap; }
+.g-hint__touch { display: none; }
+@media (pointer: coarse) { .g-hint__desk { display: none; } .g-hint__touch { display: inline; } }
+.in-chapter .g-hint, .in-chapter .g-intro { opacity: 0 !important; }
+
+/* chapters: the world's image opens from where the world is on screen */
+.chapter {
+  position: fixed; inset: 0; z-index: 20; overflow-y: auto; overscroll-behavior: contain; background: var(--bg);
+  clip-path: circle(0% at var(--ox, 50%) var(--oy, 50%)); transition: clip-path .9s cubic-bezier(.7,0,.2,1);
+}
+.chapter.in { clip-path: circle(150% at var(--ox, 50%) var(--oy, 50%)); }
+.chapter[hidden] { display: none; }
+.chapter.settled { clip-path: none; transition: none; }
+.chapter-settled #space, .chapter-settled .g-labels { visibility: hidden; }
+.chapter__bar {
+  position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 18px var(--pad); background: linear-gradient(rgba(23,24,26,.92), rgba(23,24,26,0));
+}
+.chapter__bar .label { margin: 0; }
+.chapter__close { padding: 12px 18px; }
+.chapter__hero { position: relative; height: 82svh; margin-top: -70px; overflow: hidden; }
+.chapter__hero img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.12); transition: transform 1.6s cubic-bezier(.22,.61,.36,1); }
+.chapter.in .chapter__hero img { transform: none; }
+.chapter__hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(rgba(23,24,26,.1) 30%, var(--bg)); }
+.chapter__title { position: absolute; left: var(--pad); right: var(--pad); bottom: 8svh; z-index: 1; }
+.chapter__title h2 { margin: 0; font: 200 clamp(40px, 7vw, 110px)/1.02 var(--sans); max-width: 14ch; }
+.chapter__body { position: relative; }
+.chapter__body > section { min-height: 0; }
+.chapter__body .latest { padding-top: 40px; }
+.chapter__body .disco { height: auto; padding: 60px var(--pad); }
+.chapter__body .disco__head { padding: 0 0 32px; }
+.chapter__body .disco__track { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 32px 22px; width: auto; transform: none !important; padding: 0; }
+.chapter__body .card { width: auto; }
+.chapter__body .contact { min-height: 60svh; }
+.chapter__body .contact__mail { opacity: 1 !important; transform: none !important; filter: none !important; }
+.chapter__body .about { grid-template-columns: 5fr 7fr; }
+.chapter__body .about__hands { display: none; }
+.chapter__body .g img { transform: none; }
+.chapter__next { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; padding: 40px var(--pad) 120px; }
+@media (max-width: 860px) {
+  .chapter__body .about { grid-template-columns: 1fr; }
+  .chapter__body .disco__track { grid-template-columns: repeat(2, 1fr); gap: 24px 14px; }
+}
+
+.g-noscript { position: fixed; left: var(--pad); bottom: 80px; z-index: 30; }
+
+@media (max-width: 700px) {
+  .g-head { flex-wrap: wrap; row-gap: 14px; padding: 18px 18px; }
+  .g-head nav { order: 3; width: 100%; justify-content: space-between; }
+  .orb__note { display: none; }
+  .g-hint { bottom: 16px; font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chapter, .chapter.in { transition: none; }
+}

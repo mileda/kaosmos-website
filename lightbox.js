@@ -1,15 +1,10 @@
 // Live gallery lightbox: click (or Enter) a photo to see it full screen.
 // Arrows / swipe to move through the set, Esc or a click outside the photo to close.
+// window.kaosmosLightbox(root) wires up any gallery added later (the galaxy page's chapters).
 (() => {
-  const figs = [...document.querySelectorAll('.gallery .g')];
-  if (!figs.length) return;
-
-  const photos = figs.map(f => {
-    const img = f.querySelector('img'), src = f.querySelector('source');
-    return { srcset: src ? src.srcset : '', jpg: img.src, alt: img.alt };
-  });
-
-  const box = document.createElement('div');
+  let photos = [], box = null, im, cap, count, openAt = null;
+  function build() {
+  box = document.createElement('div');
   box.className = 'lb';
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-modal', 'true');
@@ -22,7 +17,7 @@
     <button class="lb__btn lb__next" type="button" aria-label="Next photo">→</button>
     <span class="lb__count label" aria-live="polite"></span>`;
   document.body.appendChild(box);
-  const im = box.querySelector('.lb__img'), cap = box.querySelector('.lb__cap'), count = box.querySelector('.lb__count');
+  im = box.querySelector('.lb__img'); cap = box.querySelector('.lb__cap'); count = box.querySelector('.lb__count');
 
   let at = 0, last = null;
   function show(i) {
@@ -55,13 +50,7 @@
     last?.focus?.({ preventScroll: true });
   }
 
-  figs.forEach((f, i) => {
-    f.tabIndex = 0;
-    f.setAttribute('role', 'button');
-    f.setAttribute('aria-label', `Open photo: ${photos[i].alt}`);
-    f.addEventListener('click', () => open(i));
-    f.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(i); } });
-  });
+  openAt = open;
   box.querySelector('.lb__close').addEventListener('click', close);
   box.querySelector('.lb__prev').addEventListener('click', () => show(at - 1));
   box.querySelector('.lb__next').addEventListener('click', () => show(at + 1));
@@ -84,4 +73,25 @@
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) show(at + (dx < 0 ? 1 : -1));
     else if (dy > 90) close();                                         // pull down to close
   });
+  }
+
+  function init(root = document) {
+    const figs = [...root.querySelectorAll('.gallery .g')];
+    if (!figs.length) return;
+    if (!box) build();
+    const set = figs.map(f => {
+      const img = f.querySelector('img'), src = f.querySelector('source');
+      return { srcset: src ? src.srcset : '', jpg: img.src, alt: img.alt };
+    });
+    figs.forEach((f, i) => {
+      f.tabIndex = 0;
+      f.setAttribute('role', 'button');
+      f.setAttribute('aria-label', `Open photo: ${set[i].alt}`);
+      const go = () => { photos = set; openAt(i); };
+      f.addEventListener('click', go);
+      f.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
+  }
+  window.kaosmosLightbox = init;
+  init();
 })();
