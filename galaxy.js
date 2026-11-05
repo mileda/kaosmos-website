@@ -208,14 +208,14 @@ galaxy.add(nebulae);
 
 // dust lanes on the inner edge of each arm (drawn after the stars, darkening them)
 const dustMat = new THREE.ShaderMaterial({ uniforms: starMat.uniforms, vertexShader: STAR_VS, fragmentShader: DUST_FS, transparent: true, depthWrite: false, blending: THREE.NormalBlending });
-const NDUST = photo ? (phone ? 8000 : 18000) : phone ? 14000 : 34000;
+const NDUST = photo ? (phone ? 15000 : 32000) : phone ? 14000 : 34000;
 const lanePhase = Array.from({ length: ARMS * 3 }, () => rnd() * 6.283);
 const laneDensity = (r, arm) => {                                 // patchy along the arm: gaps and thick knots
   const p = lanePhase.slice(arm * 3, arm * 3 + 3);
   return Math.max(0, .55 + .45 * Math.sin(r * 2.3 + p[0]) * Math.sin(r * 5.1 + p[1]) + .25 * Math.sin(r * 11.7 + p[2]));
 };
 const dust = galaxyLayer(NDUST, () => {                         // wispy filaments on the inner (leading) edge of the arms
-  if (photo) { const p = fromPhoto(photo.dust); return { r: p.r, t: p.t, y: .03 + Math.abs(gauss()) * .06, size: .3 + rnd() * .7, c: [.03, .02, .015] }; }
+  if (photo) { const p = fromPhoto(photo.dust); return { r: p.r, t: p.t, y: gauss() * (rnd() < .15 ? .35 : .09), size: .3 + rnd() * .8, c: [.03, .02, .015] }; }
   let r, arm, tries = 0;
   do { r = 1.2 + rnd() * 9; arm = (rnd() * ARMS) | 0; } while (rnd() > laneDensity(r, arm) ** 2 && ++tries < 12);
   const off = -(.1 + rnd() * .26), feather = rnd() < .2 ? (rnd() - .5) * .5 : 0;
@@ -223,6 +223,19 @@ const dust = galaxyLayer(NDUST, () => {                         // wispy filamen
 }, dustMat);
 dust.renderOrder = 2;
 galaxy.add(dust);
+
+// thick dark clouds floating above and below the lanes: they slide over the disc as the view turns
+if (photo) {
+  const puffMat = new THREE.ShaderMaterial({ uniforms: { ...starMat.uniforms, uMap: { value: PUFF } }, vertexShader: STAR_VS, transparent: true, depthWrite: false, blending: THREE.NormalBlending,
+    fragmentShader: `uniform sampler2D uMap; varying vec3 vColor; void main(){ float a = texture2D(uMap, gl_PointCoord).a * .42; if (a < .01) discard; gl_FragColor = vec4(vColor, a); }` });
+  const clouds = galaxyLayer(phone ? 500 : 1100, () => { const p = fromPhoto(photo.dust); return { r: p.r, t: p.t, y: gauss() * .22, size: 2 + rnd() * 4.5, c: [.035, .025, .02] }; }, puffMat);
+  clouds.renderOrder = 3; galaxy.add(clouds);
+}
+// a loose haze of faint stars and motes through the whole volume, above and below the disc: depth when moving
+galaxy.add(galaxyLayer(phone ? 2500 : 6000, () => {
+  const r = Math.sqrt(rnd()) * 26, c = mixc(YOUNG, OLD, rnd());
+  return { r, t: rnd() * 6.283, y: gauss() * 3.5, size: .2 + rnd() ** 4 * .9, c: c.map(v => v * (.25 + rnd() * .5)) };
+}, starMat));
 
 // the core: a hot glow that blooms
 const coreGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(1, .82, .62).multiplyScalar(.55), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -336,7 +349,7 @@ const covers = ['arisen', 'the-lost-columns', 're-leaf-va', 'midnight-occults', 
 const WORLDS = [
   { id: 'releases', name: 'Releases', note: 'Fourteen transmissions · 2013 — 2026', pos: [7.2, .25, 3.2], view: 3.4, image: 'img/covers/arisen-1200.webp', title: 'Fourteen transmissions.', sections: ['.latest', '.disco', '.elsewhere'] },
   { id: 'live', name: 'Live', note: 'Sound and light · performed in the dark', pos: [-6.4, .35, 4.6], view: 3.8, image: 'img/photos/p15-1600.webp', title: 'Sound and light, performed in the dark.', sections: ['.live'] },
-  { id: 'about', name: 'About', note: 'The source · Istanbul, since 2013', pos: [-5.6, .2, -5.2], view: 3.0, image: 'img/photos/p08-1600.webp', title: 'An inner universe.', sections: ['.about'] },
+  { id: 'about', name: 'About', note: 'The source · Istanbul, since 2013', pos: [-5.6, .2, -5.2], view: 3.0, image: 'img/photos/p03-1600.webp', title: 'An inner universe.', sections: ['.about'] },
   { id: 'contact', name: 'Contact', note: 'Send a signal', pos: [6.4, .4, -6.2], view: 2.8, image: 'img/photos/p11-1600.webp', title: 'Across the void.', sections: ['.contact'] },
 ];
 const anims = [];                                                 // per-frame updates of the worlds (one per world, in order)
@@ -626,7 +639,7 @@ function resize() {
 addEventListener('resize', resize);
 function wake() { if (!raf && !document.hidden) raf = requestAnimationFrame(frame); }
 document.addEventListener('visibilitychange', wake);
-const tmp = new THREE.Vector3();
+const tmp = new THREE.Vector3(), par = { x: 0, y: 0 };
 function frame(now) {
   raf = 0; if (paused) return;
   const dt = Math.min(clock.getDelta(), .05); U.uTime.value += dt; lens.uniforms.uTime.value = U.uTime.value;
@@ -641,7 +654,8 @@ function frame(now) {
     orbit.dist += (goal.dist - orbit.dist) * (1 - Math.exp(-dt * 4));
     const d = intro < 1 ? 2.2 + (homeDist() - 2.2) * ie : orbit.dist;
     if (intro < 1) { orbit.dist = goal.dist = homeDist(); }
-    orbitPos({ theta: orbit.theta - (1 - ie) * 1.2, phi: orbit.phi - (1 - ie) * .5, dist: d }, camera.position);
+    par.x += ((drag || phone ? 0 : ndc.x) - par.x) * (1 - Math.exp(-dt * 2.5)); par.y += ((drag || phone ? 0 : ndc.y) - par.y) * (1 - Math.exp(-dt * 2.5));
+    orbitPos({ theta: orbit.theta - (1 - ie) * 1.2 - par.x * .06, phi: orbit.phi - (1 - ie) * .5 + par.y * .04, dist: d }, camera.position);   // the pointer leans the view: parallax
     look.lerp(tmp.set(0, 0, 0), 1 - Math.exp(-dt * 4));
     camera.lookAt(look);
     lens.uniforms.uWarp.value *= .9;

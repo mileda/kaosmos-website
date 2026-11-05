@@ -420,3 +420,4 @@ html.lb-open { overflow: hidden; }
 .lb__next { right: 16px; top: 50%; transform: translateY(-50%); }
 .lb__count { position: absolute; top: 28px; left: 20px; margin: 0; }
 @media (max-width: 640px) { .lb__prev, .lb__next { top: auto; bottom: 14px; transform: none; } .lb__fig { padding-bottom: 72px; } }
+.nav__galaxy { color: var(--accent) !important; }
