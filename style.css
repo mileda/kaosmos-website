@@ -325,3 +325,30 @@ picture { display: contents; }   /* responsive <picture> wrappers don't change t
   .attic__presets .label { display: none; }
   .attic__preset { padding: 8px 10px; font-size: 11px; letter-spacing: .08em; }
 }
+
+/* elsewhere: guest spots, remixes, other labels */
+.elsewhere { padding: 120px var(--pad) 40px; }
+.elsewhere__head { max-width: 760px; margin-bottom: 56px; }
+.elsewhere__head p:last-child { color: #b5b3ae; }
+.else__list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.else__list a {
+  display: grid; grid-template-columns: 64px minmax(0, 1.1fr) minmax(0, 1fr) 110px 120px; gap: 24px; align-items: baseline;
+  padding: 22px 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; transition: padding .4s cubic-bezier(.22,.61,.36,1), background .4s;
+}
+.else__title { font: 300 clamp(20px, 2.2vw, 30px)/1.2 var(--sans); transition: color .3s; }
+.else__year, .else__meta, .else__type, .else__via { font: 400 12px/1.6 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.else__meta { text-transform: none; letter-spacing: .04em; }
+.else__via { text-align: right; transition: color .3s; }
+.else__list a:hover, .else__list a:focus-visible { padding-left: 14px; background: linear-gradient(90deg, rgba(200,50,58,.08), transparent 60%); }
+.else__list a:hover .else__title, .else__list a:hover .else__via { color: var(--accent); }
+@media (max-width: 860px) {
+  .else__list a { grid-template-columns: 52px 1fr auto; gap: 4px 14px; padding: 18px 0; }
+  .else__title { grid-column: 2 / 4; grid-row: 1; }
+  .else__meta { grid-column: 2 / 4; }
+  .else__type { grid-column: 2; }
+  .else__via { grid-column: 3; }
+}
+.foot__links { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+.foot__links a { color: inherit; text-decoration: none; transition: color .3s; }
+.foot__links a:hover { color: var(--text); }
+@media (max-width: 640px) { .foot { flex-wrap: wrap; gap: 14px; justify-content: center; text-align: center; } .foot__links { order: 3; width: 100%; } }

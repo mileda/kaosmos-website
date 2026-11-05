@@ -10,6 +10,10 @@ const TR = {
   listen: "Bandcamp'te dinle ve satın al →",
   discoLabel: '// diskografi 2013 — 2023',
   discoTitle: 'On üç sinyal.',
+  elseLabel: '// başka yerlerde',
+  elseTitle: 'Başka frekanslardan sinyaller.',
+  elseText: 'Konuk olduğu parçalar, remiksler ve başka plak şirketlerinden yayınlar.',
+  mixtapes: 'Mixtape’ler →',
   liveLabel: '// canlı',
   liveTitle: 'Karanlıkta,<br>ses ve ışık.',
   liveText: 'Modüler synth’ler, drone’lar, projeksiyonlar. O oda için, canlı kurulur.',
@@ -33,6 +37,7 @@ document.querySelectorAll('.card__type').forEach(el => { el.dataset.en = el.text
 function setLang(lang) {
   const dict = lang === 'tr' ? TR : EN;
   document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = dict[el.dataset.i18n] ?? EN[el.dataset.i18n]; });
+  document.querySelectorAll('[data-tr]').forEach(el => { el.dataset.en ??= el.textContent; el.textContent = lang === 'tr' ? el.dataset.tr : el.dataset.en; });
   document.querySelectorAll('.card__type').forEach(el => {
     el.textContent = lang === 'tr' ? el.dataset.en.replace(/[a-z]+/g, w => TR_TYPES[w] ?? w) : el.dataset.en;
   });
