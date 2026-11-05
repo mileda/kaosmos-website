@@ -909,6 +909,10 @@
     let n = 0;
     while (acc >= DT && n < 4) { gust *= .992; step(simT); simT += DT; acc -= DT; n++; }   // the first draught dies down over a few seconds
     if (n === 4) acc = 0;
+    // Draw the cloth between its last two physics states (Verlet keeps the previous one in px/py), so motion stays
+    // smooth even when a frame gets 0 or 2 physics steps (60 Hz timing jitter) and on 90/120/144 Hz screens.
+    const k = acc / DT;
+    for (let i = 0; i < P.length; i++) { const p = P[i]; p.sx = p.x; p.sy = p.y; p.x = p.px + (p.x - p.px) * k; p.y = p.py + (p.y - p.py) * k; }
     updateSound(); measureCover();
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCan, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -916,6 +920,7 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(frameCan, fb.x * dpr, fb.y * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawLight(t); drawCurtain();
     ctx.drawImage(vigCan, 0, 0, W, H);
+    for (let i = 0; i < P.length; i++) { const p = P[i]; p.x = p.sx; p.y = p.sy; }   // back to the physics state
   }
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }, { rootMargin: '200px' }).observe(sec);
   const prep = new IntersectionObserver(([e]) => {
