@@ -79,8 +79,8 @@
 <canvas id="cosmos" aria-hidden="true"></canvas>
 <header class="flight-header"><a href="#home" class="brand">KAOSMOS</a><nav aria-label="Destinations"><a href="#releases">Releases</a><a href="#live">Live</a><a href="#about">About</a><a href="#contact">Contact</a></nav><a href="classic.html">List view ↗</a></header>
 <div id="world"><div id="origin"><p class="eyebrow">AN INNER UNIVERSE / EST. 2013</p><h1>KAOSMOS</h1><p class="subtitle">From chaos, a cosmos.</p></div></div>
-<footer class="flight-footer"><span>DRAG TO EXPLORE · SCROLL TO APPROACH</span><div><button id="home">Return to core</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button></div><output id="coordinates" aria-live="off">CORE / 00</output></footer>
-<dialog id="destination"><div class="panel-bar"><span id="destination-name"></span><button id="close">Back to universe ×</button></div><div id="content"></div></dialog>
+<footer class="flight-footer"><span>DRAG TO EXPLORE · SCROLL INTO A WORLD</span><div><button id="home">Return to core</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button></div><output id="coordinates" aria-live="off">CORE / 00</output></footer>
+<dialog id="destination" aria-labelledby="destination-name"><div class="panel-bar"><span id="destination-name"></span><button id="close">Back to universe ×</button></div><div id="content"></div></dialog>
 <div id="archive" hidden>
 
   <!-- HERO: chaos → cosmos -->
@@ -225,5 +225,6 @@
     </div>
   </section>
 </div>
+<noscript><p style="position:fixed;bottom:100px;left:5vw;z-index:20">Explore the <a href="classic.html">accessible list view</a>.</p></noscript>
 <script src="universe.js" defer></script>
 </body></html>
