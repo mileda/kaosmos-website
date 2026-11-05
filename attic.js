@@ -315,7 +315,7 @@
   }
 
   function step(t) {
-    const wind = reduce ? 0 : .045 + gust * .32;
+    const wind = reduce ? 0 : .045 + gust * .22;
     for (const p of P) {
       if (p === grabbed) { p.px = p.x; p.py = p.y; p.x += (gx - p.x) * .2; p.y += (gy - p.y) * .2; continue; }   // weight: lags the hand
       const vx = (p.x - p.px) * (p.ring ? .7 : .972), vy = (p.y - p.py) * .972;
@@ -502,8 +502,9 @@
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = .78; ctx.drawImage(fab, 0, 0); ctx.restore();
     }
 
-    // light leaking round the fabric's edges where they cross the window
+    // light leaking round the fabric's edges where they cross the window (2D fallback only)
     // Only edges that border open glass leak light (not where the panels overlap each other).
+    if (!G) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'butt';
     // glow = a wide faint stroke under a thin bright one (cheaper than shadowBlur)
     const span = [0, 1].map(panel => Array.from({ length: ROWS }, (_, r) => {
@@ -530,6 +531,7 @@
       }
     }
     ctx.restore();
+    }
     // rings
     for (const p of P) if (p.ring && p.c % 2 === 0) {
       const g = ctx.createRadialGradient(p.x - 1.2, p.y - 1.5, .5, p.x, p.y, 4.5);
@@ -567,9 +569,9 @@
       vec3 n = normalize(vN); float facing = clamp(abs(n.z), 0., 1.);
       vec2 t = vUV * uThreads;                                     // linen: warp, weft and irregular slub threads, carried by the cloth
       float weave = vn(t.x * .5) * .8 + vn(t.y * .5 + 31.) * .2;
-      float slub = vn(floor(t.x * .35) * 7.13 + t.y * .02) * .9 + vn(t.y * .03 + t.x * .004) * .1;
-      float hem = step(uHem, vUV.y) + step(vUV.x, .012) + step(.988, vUV.x);
-      float dens = 1.0 + .45 * slub - .1 * weave + hem * .9;
+      float slub = vn(t.x * .3 + vn(t.y * .004 + t.x * .01) * 2.) * .8 + vn(t.y * .02 + 9.) * .2;
+      float hem = smoothstep(uHem - .01, uHem + .01, vUV.y) + (1. - smoothstep(.0, .02, vUV.x)) * .4 + smoothstep(.98, 1., vUV.x) * .4;
+      float dens = 1.0 + .18 * slub - .05 * weave + hem * .7;
       float path = min(1. / max(facing, .2), 4.);                   // oblique fabric = longer path through it (bounded: no black quads)
       vec3 back = texture2D(uBack, vP / uView).rgb;
       back = mix(vec3(dot(back, vec3(.3, .55, .15))), back, .55);     // dense linen scatters and mutes the colour behind it
@@ -623,14 +625,14 @@
   function buildGLMesh() {
     if (!G) return;
     gcv.width = cv.width; gcv.height = cv.height;
-    G.data = new Float32Array(P.length * 8); G.z = new Float32Array(P.length); G.z2 = new Float32Array(P.length);
+    G.data = new Float32Array(P.length * 8); G.z = new Float32Array(P.length); G.z2 = new Float32Array(P.length); G.zt = new Float32Array(P.length); G.idx = new Uint16Array(2 * (ROWS - 1) * (COLS - 1) * 6);
     const idx = [];
     for (let panel = 0; panel < 2; panel++) {
       const b = panel * ROWS * COLS;
       for (let r = 0; r < ROWS - 1; r++) for (let c = 0; c < COLS - 1; c++) { const i = b + r * COLS + c; idx.push(i, i + 1, i + COLS, i + 1, i + COLS + 1, i + COLS); }
     }
     G.count = idx.length;
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, G.idx.byteLength, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, G.vb); gl.bufferData(gl.ARRAY_BUFFER, G.data.byteLength, gl.DYNAMIC_DRAW);
     gl.bindTexture(gl.TEXTURE_2D, G.tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, backCan);
@@ -644,18 +646,21 @@
     const d = G.data, z = G.z, z2 = G.z2;
     for (let panel = 0; panel < 2; panel++) {
       const b = panel * ROWS * COLS;
-      for (let r = 0; r < ROWS; r++) {                              // depth across each row from how much it is gathered
-        let acc = 0; z[b + r * COLS] = 0;
-        for (let c = 0; c < COLS - 1; c++) {
-          const p = P[b + r * COLS + c], q = P[b + r * COLS + c + 1], dd = Math.hypot(q.x - p.x, q.y - p.y);
-          acc += Math.sqrt(Math.max(0, restW * restW - dd * dd)) * Math.sin(Math.PI * (c + .5) / PLEAT);
-          z[b + r * COLS + c + 1] = acc;
+      // pleat depth at each point: how much the neighbouring cloth is gathered (a segment shorter than its rest width
+      // must have turned in z) times an alternating pleat profile. Local and bounded, so rows agree with each other.
+      const seg = c0 => { const p = P[b + c0], q = P[b + c0 + 1], dd = Math.hypot(q.x - p.x, q.y - p.y); return Math.sqrt(Math.max(0, restW * restW - dd * dd)); };
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        const o = r * COLS + c, g = (c > 0 ? seg(o - 1) : seg(o)) + (c < COLS - 1 ? seg(o) : seg(o - 1));
+        z[b + o] = g * .5 * Math.cos(Math.PI * c / PLEAT) * PLEAT * .5;
+      }
+      for (let pass = 0; pass < 2; pass++) {                       // soften down and across the cloth, then ease over time
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+          const i = b + r * COLS + c, ru = Math.max(0, r - 1), rd = Math.min(ROWS - 1, r + 1);
+          G.zt[i] = (z[b + ru * COLS + c] + 2 * z[i] + z[b + rd * COLS + c]) / 4;
         }
+        z.set(G.zt.subarray(b, b + ROWS * COLS), b);
       }
-      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {   // smooth down the cloth so rows agree
-        const i = b + r * COLS + c, ru = Math.max(0, r - 1), rd = Math.min(ROWS - 1, r + 1);
-        z2[i] = (z[b + ru * COLS + c] + 2 * z[i] + z[b + rd * COLS + c]) / 4;
-      }
+      for (let i = b; i < b + ROWS * COLS; i++) z2[i] += (z[i] - z2[i]) * .5;
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
         const i = b + r * COLS + c, cl = Math.max(0, c - 1), cr = Math.min(COLS - 1, c + 1), ru = Math.max(0, r - 1), rd = Math.min(ROWS - 1, r + 1);
         const A = P[b + r * COLS + cl], B = P[b + r * COLS + cr], U = P[b + ru * COLS + c], D = P[b + rd * COLS + c];
@@ -674,7 +679,16 @@
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(G.pr);
     gl.bindBuffer(gl.ARRAY_BUFFER, G.vb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, d);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.ib);
+    let k = 0; const ix = G.idx;
+    for (let panel = 0; panel < 2; panel++) {
+      const b = panel * ROWS * COLS;
+      for (let r = 0; r < ROWS - 1; r++) for (let c = 0; c < COLS - 1; c++) {
+        const i = b + r * COLS + c, A = P[i], B = P[i + 1], C2 = P[i + COLS + 1], D = P[i + COLS];
+        if ((A.x - C2.x) ** 2 + (A.y - C2.y) ** 2 <= (B.x - D.x) ** 2 + (B.y - D.y) ** 2) { ix[k++] = i; ix[k++] = i + 1; ix[k++] = i + COLS + 1; ix[k++] = i; ix[k++] = i + COLS + 1; ix[k++] = i + COLS; }
+        else { ix[k++] = i; ix[k++] = i + 1; ix[k++] = i + COLS; ix[k++] = i + 1; ix[k++] = i + COLS + 1; ix[k++] = i + COLS; }
+      }
+    }
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.ib); gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, ix);
     gl.enableVertexAttribArray(G.aP); gl.vertexAttribPointer(G.aP, 2, gl.FLOAT, false, 32, 0);
     gl.enableVertexAttribArray(G.aN); gl.vertexAttribPointer(G.aN, 3, gl.FLOAT, false, 32, 8);
     gl.enableVertexAttribArray(G.aT); gl.vertexAttribPointer(G.aT, 3, gl.FLOAT, false, 32, 20);
