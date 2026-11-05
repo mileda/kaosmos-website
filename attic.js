@@ -302,7 +302,7 @@
       const base = P.length;
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
         const x = x0 + c * restW * gather + Math.sin(c * 1.9) * restW * .05, y = rod.y + r * sy;
-        P.push({ x, y, px: x, py: y, ring: r === 0, panel, r, c, m: r >= ROWS - 3 ? 2.2 : 1.1 });   // weighted hem
+        P.push({ x, y, px: x, py: y, ring: r === 0, panel, r, c, m: r >= ROWS - 3 ? 2 : 1.05 });   // weighted hem
       }
       const at = (r, c) => P[base + r * COLS + c];
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
@@ -323,14 +323,14 @@
       if (p.ring) { p.x += vx; p.y = rod.y; continue; }
       const k = p.r / ROWS, w = Math.sin(t * .0011 + p.r * .09 - p.c * .35 + p.panel * 2.1) * .7 + Math.sin(t * .00047 + p.c * .6 + p.panel) * .3;
       const breeze = w * wind * k * (1 + .4 * Math.sin(t * .0003 + p.panel * 3));   // travelling ripples, stronger towards the hem
-      p.x += vx + breeze; p.y += vy + .42 * p.m - Math.abs(w) * wind * k * .25;     // the draught lifts the hem a little
+      p.x += vx + breeze; p.y += vy + .39 * p.m - Math.abs(w) * wind * k * .25;     // the draught lifts the hem a little
     }
-    for (let k = 0, it = grabbed ? 12 : 12; k < it; k++) {
+    for (let k = 0, it = grabbed ? 6 : 12; k < it; k++) {
       for (const [a, b, rest] of C) {
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || .001;
         if (d <= rest) continue;                                                   // resists stretch, folds freely
         const f = (d - rest) / d;
-        const ma = a === grabbed ? .03 : 1 / a.m, mb = b === grabbed ? .03 : 1 / b.m, s = ma + mb || 1;   // held point is heavy, not immovable
+        const ma = a === grabbed ? .003 : 1 / a.m, mb = b === grabbed ? .003 : 1 / b.m, s = ma + mb || 1;   // held point is heavy, not immovable
         a.x += dx * f * ma / s; b.x -= dx * f * mb / s;
         if (!a.ring) a.y += dy * f * ma / s;
         if (!b.ring) b.y -= dy * f * mb / s;
