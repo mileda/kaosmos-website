@@ -16,7 +16,7 @@ const TR = {
   mixtapes: 'Mixtape’ler →',
   liveLabel: '// canlı',
   liveTitle: 'Karanlıkta,<br>ses ve ışık.',
-  liveText: 'Modüler synth’ler, drone’lar, projeksiyonlar. O oda için, canlı kurulur.',
+  liveText: 'Modüler synth’ler, drone’lar, projeksiyonlar. Canlı çalınır.',
   aboutLabel: '// hakkında',
   aboutTitle: "İstanbul'dan bir solo proje.",
   about1: "KAOSMOS, 2013'te başlayan, İstanbul çıkışlı solo ambient, drone ve deneysel müzik projesi. Gizemli atmosferik temaları sentezleyicilerin uğuldayan soğuk katmanlarıyla harmanlayarak KAOSMOS'a hayat veriyor.",
@@ -47,9 +47,12 @@ function setLang(lang) {
   document.dispatchEvent(new CustomEvent('langchange'));
 }
 
+// Turkish is switched off for now (the translations above stay). Set TR_ENABLED = true to bring the EN / TR toggle back.
+const TR_ENABLED = false;
 let saved = null; try { saved = localStorage.getItem('lang'); } catch {}
-const initial = new URLSearchParams(location.search).get('lang') || saved || (navigator.language.startsWith('tr') ? 'tr' : 'en');
+const initial = TR_ENABLED ? (new URLSearchParams(location.search).get('lang') || saved || (navigator.language.startsWith('tr') ? 'tr' : 'en')) : 'en';
 setLang(initial === 'tr' ? 'tr' : 'en');
+if (!TR_ENABLED) document.querySelector('.lang').hidden = true;
 document.querySelector('.lang').addEventListener('click', () => {
   setLang(document.documentElement.lang === 'tr' ? 'en' : 'tr');
   window.track?.('language', { lang: document.documentElement.lang });
