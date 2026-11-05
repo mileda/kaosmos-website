@@ -325,12 +325,12 @@
       const breeze = w * wind * k * (1 + .4 * Math.sin(t * .0003 + p.panel * 3));   // travelling ripples, stronger towards the hem
       p.x += vx + breeze; p.y += vy + .42 * p.m - Math.abs(w) * wind * k * .25;     // the draught lifts the hem a little
     }
-    for (let k = 0, it = grabbed ? 20 : 12; k < it; k++) {
+    for (let k = 0, it = grabbed ? 12 : 12; k < it; k++) {
       for (const [a, b, rest] of C) {
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || .001;
         if (d <= rest) continue;                                                   // resists stretch, folds freely
         const f = (d - rest) / d;
-        const ma = a === grabbed ? .12 : 1 / a.m, mb = b === grabbed ? .12 : 1 / b.m, s = ma + mb || 1;   // held point is heavy, not immovable
+        const ma = a === grabbed ? .03 : 1 / a.m, mb = b === grabbed ? .03 : 1 / b.m, s = ma + mb || 1;   // held point is heavy, not immovable
         a.x += dx * f * ma / s; b.x -= dx * f * mb / s;
         if (!a.ring) a.y += dy * f * ma / s;
         if (!b.ring) b.y -= dy * f * mb / s;
