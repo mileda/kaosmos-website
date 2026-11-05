@@ -12,7 +12,7 @@ const TR = {
   discoTitle: 'On üç sinyal.',
   liveLabel: '// canlı',
   liveTitle: 'Karanlıkta,<br>ses ve ışık.',
-  liveText: 'Modüler sentezleyiciler, drone’lar ve projeksiyonlar — her set, gerçekleştiği mekân için canlı olarak kurulur.',
+  liveText: 'Modüler synth’ler, drone’lar, projeksiyonlar. O oda için, canlı kurulur.',
   aboutLabel: '// hakkında',
   aboutTitle: "İstanbul'dan bir solo proje.",
   about1: "KAOSMOS, 2013'te başlayan, İstanbul çıkışlı solo ambient, drone ve deneysel müzik projesi. Gizemli atmosferik temaları sentezleyicilerin uğuldayan soğuk katmanlarıyla harmanlayarak KAOSMOS'a hayat veriyor.",
