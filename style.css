@@ -30,12 +30,13 @@ h2 { font-size: clamp(32px, 5vw, 72px); }
 /* background particle field + film grain */
 #field { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
 .grain {
-  position: fixed; inset: -50%; z-index: 50; pointer-events: none; opacity: .06;
+  position: fixed; inset: -12%;   /* just enough margin for the jitter: a 4x-viewport layer cost phones a lot of GPU memory */ z-index: 50; pointer-events: none; opacity: .06;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   animation: grain 1.2s steps(6) infinite;
 }
 @keyframes grain { 0%{transform:translate(0,0)} 33%{transform:translate(-3%,2%)} 66%{transform:translate(2%,-3%)} 100%{transform:translate(0,0)} }
 main, .foot { position: relative; z-index: 1; }
+picture { display: contents; }   /* responsive <picture> wrappers don't change the image layout */
 
 /* nav */
 .nav {
@@ -301,7 +302,7 @@ main, .foot { position: relative; z-index: 1; }
 .portal__media { background: #0b0c0e; }
 .portal__media::before {
   content: ""; position: absolute; inset: -8%;
-  background: url("img/photos/p15.jpg") center / cover no-repeat;
+  background: url("img/photos/p15-960.webp") center / cover no-repeat;   /* blurred 48px anyway: the small file is plenty */
   filter: blur(48px) brightness(.45) saturate(1.2); transform: scale(1.1);
 }
 .portal__media img {

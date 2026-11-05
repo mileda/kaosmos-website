@@ -10,9 +10,9 @@
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; };
   const fab = mk(1, 1), fctx = fab.getContext('2d', { willReadFrequently: true });   // curtain layer (also read back for light coverage)
 
-  let W, H, dpr, win, rod, moon, COLS, ROWS, P = [], C = [], restW;
-  let bgCan, skyCan, cloudCan, moonCan, glassCan, frameCan, vigCan, grainCan, beacons = [];
-  let twinkle = [], drops = [], motes = [], shoot = null, cover = new Float32Array(48), backCan;
+  let W, H, dpr, win, rod, moon, COLS, ROWS, P = [], C = [], RINGS = [], MID = [[], []], restW;
+  let fb, bgCan, skyCan, cloudCan, moonCan, glassCan, frameCan, vigCan, grainCan, beacons = [];
+  let twinkle = [], drops = [], motes = [], shoot = null, cover = new Float32Array(48), backTex;
   let gust = 0, gusted = false, visible = false, grabbed = null, gx = 0, gy = 0, lastX = 0, lastY = 0, speed = 0, travel = 0, openness = 0, played = false;
 
   // ---------- noise ----------
@@ -29,7 +29,12 @@
   const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
   // ---------- layout ----------
-  function layout() {
+  // Building the scene is ~1 s of work on a phone. It is split into small tasks: when the visitor heads towards the attic
+  // they run one by one in idle time (no long freeze while scrolling); a resize or a direct jump runs them all at once.
+  let built = false, sizeKey = '', queue = null;
+  const keyNow = () => `${cv.clientWidth}x${cv.clientHeight}@${Math.min(devicePixelRatio || 1, 2)}`;
+  function setup() {
+    sizeKey = keyNow(); built = false;
     dpr = Math.min(devicePixelRatio || 1, 2);
     W = cv.clientWidth; H = cv.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr;
@@ -40,10 +45,31 @@
     rod = { y: win.y - win.ft - 12, x0: win.x - ww * .24, x1: win.x + ww * 1.24 };
     moon = { x: win.x + win.w * .7, y: win.y + win.h * .24, r: win.w * .05 };
     seed = 7;
-    buildRoom(); buildSky(); buildClouds(); buildMoon(); buildGlass(); buildFrame(); buildVignette(); buildGrain(); buildCloth(); buildBacklight(); buildGLMesh();
-    twinkle = Array.from({ length: 16 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h * .5, s: .6 + rand() * .7, p: rand() * 6.3, f: .5 + rand() * 1.8 }));
-    motes = Array.from({ length: phone ? 40 : 90 }, () => ({ x: win.x - win.w * .55 + rand() * win.w * 1.5, y: win.y + win.h + rand() * (H * .97 - win.y - win.h), v: .04 + rand() * .12, ph: rand() * 6.3, s: .6 + rand() * 1.1, b: .4 + rand() * .6 }));
-    drops = Array.from({ length: 5 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h, v: .2 + rand() * .5, l: 6 + rand() * 16 }));
+    const settle = () => { for (let i = 0; i < 20; i++) step(i * 16); };   // 6 × 20 steps: settle the drape before first view
+    return [buildRoom, buildSky, buildClouds, buildMoon, buildGlass, buildFrame, buildVignette, buildGrain, bakeGrain, buildCloth,
+      settle, settle, settle, settle, settle, settle, buildBacklight, buildGLMesh, () => {
+        twinkle = Array.from({ length: 16 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h * .5, s: .6 + rand() * .7, p: rand() * 6.3, f: .5 + rand() * 1.8 }));
+        motes = Array.from({ length: phone ? 40 : 90 }, () => ({ x: win.x - win.w * .55 + rand() * win.w * 1.5, y: win.y + win.h + rand() * (H * .97 - win.y - win.h), v: .04 + rand() * .12, ph: rand() * 6.3, s: .6 + rand() * 1.1, b: .4 + rand() * .6 }));
+        drops = Array.from({ length: 5 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h, v: .2 + rand() * .5, l: 6 + rand() * 16 }));
+        built = true;
+      }];
+  }
+  function layout() {                                             // everything now
+    if (built && keyNow() === sizeKey) return;                    // phones fire resize when the URL bar slides: same canvas, skip the rebuild
+    if (!queue || keyNow() !== sizeKey) queue = setup();
+    while (queue.length) queue.shift()();
+    queue = null;
+  }
+  function prepare() {                                            // the same, a task per idle slice
+    if (built || queue) return;
+    queue = setup();
+    const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8, didTimeout: false }), 16));
+    const run = dl => {
+      if (!queue) return;
+      do queue.shift()(); while (queue.length && dl.timeRemaining() > 12);
+      if (queue.length) idle(run, { timeout: 120 }); else queue = null;
+    };
+    idle(run, { timeout: 120 });
   }
 
   // window glass shape: skylight trapezoid (top slightly narrower, it sits in the roof slope)
@@ -250,13 +276,22 @@
     }
   }
 
+  function bakeGrain() {                                          // static grain on the room and vignette keeps the dark gradients from banding
+    for (const [can, a] of [[bgCan, .09], [vigCan, .05]]) {
+      const c = can.getContext('2d'); c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalCompositeOperation = can === bgCan ? 'overlay' : 'source-atop'; c.globalAlpha = a;
+      c.fillStyle = c.createPattern(grainCan, 'repeat'); c.fillRect(0, 0, can.width, can.height); c.restore();
+    }
+  }
   function buildGrain() {
     grainCan = noiseCanvas(220, 220, () => { const v = 128 + (rand() - .5) * 120; return [v, v, v, 255]; });
   }
 
   function buildFrame() {
-    frameCan = mk(W * dpr, H * dpr); const c = frameCan.getContext('2d'); c.scale(dpr, dpr);
-    const ft = win.ft;
+    const ft = win.ft, m = 40;
+    fb = { x: Math.max(0, Math.floor(win.x - ft * 2.2 - m)), y: Math.max(0, Math.floor(win.y - ft - m)) };
+    fb.w = Math.min(W, Math.ceil(win.x + win.w + ft * 2.2 + m)) - fb.x; fb.h = Math.min(H, Math.ceil(win.y + win.h + ft * 1.9 + m + 8)) - fb.y;
+    frameCan = mk(fb.w * dpr, fb.h * dpr); const c = frameCan.getContext('2d'); c.scale(dpr, dpr); c.translate(-fb.x, -fb.y);
     const wood = noiseCanvas(256, 48, (x, y) => {                                   // dark walnut grain
       const g = fbm(x * 3, y * 26, 4), ring = Math.sin((y * 40 + g * 10) * 1.3) * .5 + .5, v = 34 + g * 22 + ring * 8;
       return [v * 1.05, v * .82, v * .62, 255];
@@ -302,16 +337,18 @@
       const base = P.length;
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
         const x = x0 + c * restW * gather + Math.sin(c * 1.9) * restW * .05, y = rod.y + r * sy;
-        P.push({ x, y, px: x, py: y, ring: r === 0, panel, r, c, m: r >= ROWS - 3 ? 2 : 1.05 });   // weighted hem
+        const m = r >= ROWS - 3 ? 2 : 1.05;                                       // weighted hem
+        P.push({ x, y, px: x, py: y, ring: r === 0, panel, r, c, m, im: 1 / m });
       }
       const at = (r, c) => P[base + r * COLS + c];
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-        if (c < COLS - 1) C.push([at(r, c), at(r, c + 1), restW]);
-        if (r < ROWS - 1) C.push([at(r, c), at(r + 1, c), sy]);
-        if (r < ROWS - 2) C.push([at(r, c), at(r + 2, c), sy * 2]);          // bend resistance: heavier, smoother drape
+        if (c < COLS - 1) C.push({ a: at(r, c), b: at(r, c + 1), rest: restW });
+        if (r < ROWS - 1) C.push({ a: at(r, c), b: at(r + 1, c), rest: sy });
+        if (r < ROWS - 2) C.push({ a: at(r, c), b: at(r + 2, c), rest: sy * 2 });   // bend resistance: heavier, smoother drape
       }
     });
-    for (let i = 0; i < 220; i++) step(i * 16);                                  // settle before first view
+    RINGS = P.filter(p => p.ring);
+    const mid = Math.floor(ROWS * .45); MID = [0, 1].map(pn => P.filter(p => p.panel === pn && p.r === mid));
   }
 
   function step(t) {
@@ -325,21 +362,22 @@
       const breeze = w * wind * k * (1 + .4 * Math.sin(t * .0003 + p.panel * 3));   // travelling ripples, stronger towards the hem
       p.x += vx + breeze; p.y += vy + .39 * p.m - Math.abs(w) * wind * k * .25;     // the draught lifts the hem a little
     }
-    for (let k = 0, it = grabbed ? 6 : 12; k < it; k++) {
-      for (const [a, b, rest] of C) {
-        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || .001;
-        if (d <= rest) continue;                                                   // resists stretch, folds freely
-        const f = (d - rest) / d;
-        const ma = a === grabbed ? .003 : 1 / a.m, mb = b === grabbed ? .003 : 1 / b.m, s = ma + mb || 1;   // held point is heavy, not immovable
-        a.x += dx * f * ma / s; b.x -= dx * f * mb / s;
-        if (!a.ring) a.y += dy * f * ma / s;
-        if (!b.ring) b.y -= dy * f * mb / s;
+    const g = grabbed, nC = C.length, x0 = rod.x0, x1 = rod.x1;
+    for (let k = 0, it = g ? 6 : 12; k < it; k++) {
+      for (let i = 0; i < nC; i++) {
+        const cn = C[i], a = cn.a, b = cn.b, dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy, rest = cn.rest;
+        if (d2 <= rest * rest) continue;                                          // resists stretch, folds freely
+        const d = Math.sqrt(d2), ma = a === g ? .003 : a.im, mb = b === g ? .003 : b.im;   // held point is heavy, not immovable
+        const f = (d - rest) / (d * (ma + mb));
+        a.x += dx * f * ma; b.x -= dx * f * mb;
+        if (!a.ring) a.y += dy * f * ma;
+        if (!b.ring) b.y -= dy * f * mb;
       }
-      for (const p of P) if (p.ring) p.x = Math.min(rod.x1, Math.max(rod.x0, p.x));
+      for (let i = 0; i < RINGS.length; i++) { const p = RINGS[i]; p.x = p.x < x0 ? x0 : p.x > x1 ? x1 : p.x; }
     }
-    const mid = Math.floor(ROWS * .45);
-    const Lx = Math.max(...P.filter(p => p.panel === 0 && p.r === mid).map(p => p.x));
-    const Rx = Math.min(...P.filter(p => p.panel === 1 && p.r === mid).map(p => p.x));
+    let Lx = -Infinity, Rx = Infinity;
+    for (const p of MID[0]) if (p.x > Lx) Lx = p.x;
+    for (const p of MID[1]) if (p.x < Rx) Rx = p.x;
     openness += (Math.min(1, Math.max(0, (Rx - Lx) / win.w)) - openness) * .1;
   }
 
@@ -409,30 +447,38 @@
     }
   }
 
+  // The shafts and the floor pool are each one image: a cover.length × 64 mask (light passing each slice of the window ×
+  // the falloff along the beam), rewritten every frame and drawn skewed into place. Two draws instead of ~150 gradient fills.
+  const LM = 64, shaftCan = mk(48, LM), poolCan = mk(48, LM), sctx = shaftCan.getContext('2d'), pctx = poolCan.getContext('2d');
+  const shaftImg = sctx.createImageData(48, LM), poolImg = pctx.createImageData(48, LM), shaftV = new Float32Array(LM), poolV = new Float32Array(LM);
+  for (let j = 0; j < LM; j++) {
+    const u = (j + .5) / LM;
+    poolV[j] = (u < .44 || u > .54 ? 1 : 0) * (u < .6 ? 1 - u / .6 * .5 : .5 * (1 - (u - .6) / .4));   // split by the transom's shadow
+  }
   function drawLight(t) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     const n = cover.length, top = win.y + win.h * .35, bottom = win.y + win.h, floor = H * .97, shift = -win.w * .42;
-    let avg = 0;
-    for (let i = 0; i < n; i++) {
-      const x0 = win.x + win.w * i / n, x1 = win.x + win.w * (i + 1) / n;
-      const pass = 1 - cover[i] * .72; avg += pass / n;                            // the curtain dims what passes
-      const mullion = Math.abs((x0 + x1) / 2 - (win.x + win.w / 2)) < win.w / n * .9 ? .25 : 1;
-      const a = .075 * pass * mullion;
-      // volumetric shaft through the room
-      const g = ctx.createLinearGradient(0, top, 0, floor);
-      g.addColorStop(0, `rgba(150,172,215,${a})`); g.addColorStop(.7, `rgba(150,172,215,${a * .35})`); g.addColorStop(1, 'rgba(150,172,215,0)');
-      ctx.fillStyle = g; ctx.beginPath();
-      ctx.moveTo(x0, bottom); ctx.lineTo(x1 + .5, bottom); ctx.lineTo(x1 + shift * 1.1, floor); ctx.lineTo(x0 + shift * 1.1, floor); ctx.fill();
-      // pool of moonlight on the floor: the window's panes skewed across the planks, split by the transom's shadow
-      const fy0 = H * .875, fy1 = H * .975, fg = ctx.createLinearGradient(0, fy0, 0, fy1);
-      fg.addColorStop(0, `rgba(170,190,228,${.11 * pass * mullion})`); fg.addColorStop(.6, `rgba(170,190,228,${.055 * pass * mullion})`); fg.addColorStop(1, 'rgba(170,190,228,0)');
-      ctx.fillStyle = fg;
-      const quad = (ta, tb) => {
-        const ya = fy0 + (fy1 - fy0) * ta, yb = fy0 + (fy1 - fy0) * tb, sa = shift * (.8 + .4 * ta), sb = shift * (.8 + .4 * tb);
-        ctx.beginPath(); ctx.moveTo(x0 + sa, ya); ctx.lineTo(x1 + sa + .5, ya); ctx.lineTo(x1 + sb + .5, yb); ctx.lineTo(x0 + sb, yb); ctx.fill();
-      };
-      quad(0, .44); quad(.54, 1);
+    for (let j = 0; j < LM; j++) {                                  // the old shaft gradient (top → floor) sampled over bottom → floor
+      const y = bottom + (floor - bottom) * (j + .5) / LM, g = (y - top) / (floor - top);
+      shaftV[j] = g < .7 ? 1 - g / .7 * .65 : .35 * (1 - (g - .7) / .3);
     }
+    let avg = 0;
+    const sd = shaftImg.data, pd = poolImg.data;
+    for (let i = 0; i < n; i++) {
+      const pass = 1 - cover[i] * .72; avg += pass / n;                            // the curtain dims what passes
+      const mullion = Math.abs(i + .5 - n / 2) < .9 ? .25 : 1, k = pass * mullion;
+      for (let j = 0; j < LM; j++) {
+        const o = (j * n + i) * 4;
+        sd[o] = 150; sd[o + 1] = 172; sd[o + 2] = 215; sd[o + 3] = 255 * .075 * k * shaftV[j];
+        pd[o] = 170; pd[o + 1] = 190; pd[o + 2] = 228; pd[o + 3] = 255 * .11 * k * poolV[j];
+      }
+    }
+    sctx.putImageData(shaftImg, 0, 0); pctx.putImageData(poolImg, 0, 0);
+    // volumetric shafts through the room
+    ctx.save(); ctx.transform(win.w / n, 0, shift * 1.1 / LM, (floor - bottom) / LM, win.x, bottom); ctx.drawImage(shaftCan, 0, 0); ctx.restore();
+    // pool of moonlight on the floor: the window's panes skewed across the planks
+    const fy0 = H * .875, fy1 = H * .975;
+    ctx.save(); ctx.transform(win.w / n, 0, shift * .4 / LM, (fy1 - fy0) / LM, win.x + shift * .8, fy0); ctx.drawImage(poolCan, 0, 0); ctx.restore();
     // moonlight bouncing off the wall around the window, and its blurred reflection on the varnished floor
     const cx = win.x + win.w / 2, cy = win.y + win.h / 2;
     const wg = ctx.createRadialGradient(cx, cy, win.w * .35, cx, cy, win.w * 1.5);
@@ -442,13 +488,14 @@
     rg.addColorStop(0, `rgba(150,170,210,${.06 * avg})`); rg.addColorStop(1, 'rgba(150,170,210,0)');
     ctx.fillStyle = rg; ctx.fillRect(win.x + win.w * .08, fl, win.w * .84, H - fl);
     // dust drifting through the beams, lit only where the light reaches it
+    ctx.fillStyle = '#cddaf5';
     for (const m of motes) {
       if (!reduce) { m.x += Math.sin(t * .0003 + m.ph) * .07; m.y += m.v; if (m.y > floor) { m.y = bottom; m.x = win.x - win.w * .55 + Math.random() * win.w * 1.5; } }
       const tt = (m.y - bottom) / (floor - bottom), sx = m.x - shift * 1.1 * tt, i = Math.floor((sx - win.x) / win.w * n);
       if (i < 0 || i >= n) continue;
       const a = (1 - cover[i] * .72) * (1 - tt) * .55 * m.b * (.6 + .4 * Math.sin(t * .002 + m.ph));
       if (a < .02) continue;
-      ctx.fillStyle = `rgba(205,218,245,${a})`; ctx.beginPath(); ctx.arc(m.x, m.y, m.s * .5, 0, 7); ctx.fill();
+      ctx.globalAlpha = a; ctx.fillRect(m.x - m.s * .5, m.y - m.s * .5, m.s, m.s);
     }
     ctx.restore();
   }
@@ -460,7 +507,14 @@
     ctx.fillStyle = rg; ctx.fillRect(rod.x0 - 12, rod.y - 3.5, rod.x1 - rod.x0 + 24, 7);
     ctx.fillStyle = '#1a1714'; [rod.x0 - 14, rod.x1 + 14].forEach(x => { ctx.beginPath(); ctx.arc(x, rod.y, 6, 0, 7); ctx.fill(); });
 
-    if (G) { renderGL(); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(gcv, 0, 0); ctx.restore(); } else {
+    if (G) {
+      renderGL();
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i < P.length; i++) { const p = P[i]; if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; }
+      x0 = Math.max(0, x0 - 4); y0 = Math.max(0, y0 - 4); x1 = Math.min(W, x1 + 4); y1 = Math.min(H, y1 + 4);
+      const k = gcv.width / W;
+      if (x1 > x0 && y1 > y0) ctx.drawImage(gcv, x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k, x0, y0, x1 - x0, y1 - y0);
+    } else {
     if (fab.width !== cv.width || fab.height !== cv.height) { fab.width = cv.width; fab.height = cv.height; }
     fctx.setTransform(dpr, 0, 0, dpr, 0, 0); fctx.clearRect(0, 0, W, H);
     const reach = win.w * .6, L = new Float32Array(ROWS * COLS);
@@ -526,8 +580,8 @@
         if (inWindow(ox, my + ny * 10) < .05) continue;                           // nothing but frame/wall beyond it
         const a = (G ? .17 : .28) * w * (.3 + .7 * Math.exp(-Math.hypot(mx - moon.x, my - moon.y) / (win.w * .7)));
         ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
-        ctx.lineWidth = 7; ctx.strokeStyle = `rgba(150,180,240,${a * .25})`; ctx.stroke();
-        ctx.lineWidth = 1.3; ctx.strokeStyle = `rgba(195,212,248,${a})`; ctx.stroke();
+        ctx.globalAlpha = a * .25; ctx.lineWidth = 7; ctx.strokeStyle = '#96b4f0'; ctx.stroke();
+        ctx.globalAlpha = a; ctx.lineWidth = 1.3; ctx.strokeStyle = '#c3d4f8'; ctx.stroke();
       }
     }
     ctx.restore();
@@ -550,7 +604,7 @@
   // What shines through is a blurred copy of the real scene behind (sky, moon, frame and mullion shadows), attenuated
   // by the light's path length in the fabric, so fold walls seen edge-on go dark exactly like a backlit curtain.
   const gcv = document.createElement('canvas');
-  const gl = gcv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  const gl = gcv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: false });   // copied into the scene right after drawing, so no need to keep the buffer
   let G = null;
   const PLEAT = 1.6;
   const VS = `attribute vec2 aP; attribute vec3 aN; attribute vec3 aT; uniform vec2 uRes;
@@ -601,30 +655,50 @@
     } catch (e) { console.warn('attic: WebGL fabric unavailable, using 2D', e); G = null; }
   }
 
-  function buildBacklight() {                                     // what the fabric is lit by: the scene behind it, diffused
+  // What the fabric is lit by: the scene behind it, diffused. Computed straight into a small pixel buffer (sky gradient with
+  // the city glow, the moon and its halo, the frame and mullions as shadow) and blurred on the CPU, so building it never
+  // waits on the GPU to read back the big canvases.
+  function buildBacklight() {
     if (!G) return;
-    let c0 = mk(W / 2, H / 2); const c = c0.getContext('2d'); c.scale(.5, .5);
-    c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
-    c.save(); winPath(c); c.clip(); c.drawImage(skyCan, win.x, win.y, win.w, win.h);
-    const md = moonCan.width / dpr; c.drawImage(moonCan, moon.x - md / 2, moon.y - md / 2, md, md);
-    const g = c.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, moon.r * 6);
-    g.addColorStop(0, 'rgba(230,236,250,.9)'); g.addColorStop(.25, 'rgba(170,185,220,.25)'); g.addColorStop(1, 'rgba(170,185,220,0)');
-    c.fillStyle = g; c.fillRect(moon.x - moon.r * 6, moon.y - moon.r * 6, moon.r * 12, moon.r * 12);
-    c.restore();
-    c.globalCompositeOperation = 'destination-out'; c.drawImage(frameCan, 0, 0, W, H); c.globalCompositeOperation = 'destination-over';
-    c.fillStyle = '#000'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';   // frame and mullions cast a shadow onto the curtain
-    while (c0.width > W / 20) { const nx = mk(c0.width / 2, c0.height / 2); nx.getContext('2d').drawImage(c0, 0, 0, nx.width, nx.height); c0 = nx; }
-    for (let k = 0; k < 2; k++) {                                   // up and down again: bilinear passes smooth away the blockiness
-      const up = mk(c0.width * 2, c0.height * 2), uc = up.getContext('2d'); uc.imageSmoothingQuality = 'high'; uc.drawImage(c0, 0, 0, up.width, up.height);
-      const dn = mk(c0.width, c0.height); dn.getContext('2d').drawImage(up, 1, 1, up.width - 2, up.height - 2, 0, 0, dn.width, dn.height); c0 = dn;
+    const S = 8, bw = Math.ceil(W / S), bh = Math.ceil(H / S), n = bw * bh, R = new Float32Array(n), Gc = new Float32Array(n), B = new Float32Array(n);
+    const mw = Math.max(4, win.ft * .45), cxm = win.x + win.w / 2, cym = win.y + win.h * .5, haloR = moon.r * 6;
+    for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) {
+      const x = (i + .5) * S, y = (j + .5) * S;
+      let open = inWindow(x, y);
+      if (open <= 0) continue;
+      open *= sstep(mw * .5, mw * .5 + 3, Math.abs(x - cxm)) * sstep(mw * .5, mw * .5 + 3, Math.abs(y - cym));   // mullion shadows
+      const v = (y - win.y) / win.h, lp = sstep(.18, .95, v) ** 1.7;
+      let r = 2 + 7 * v + 98 * lp, g = 5 + 10 * v + 66 * lp, b = 13 + 21 * v + 48 * lp;
+      const md = Math.hypot(x - moon.x, (y - moon.y)) / win.w, sc = Math.exp(-md / .22) * .5 + Math.exp(-md / .06) * .45;
+      r += 42 * sc; g += 50 * sc; b += 64 * sc;
+      const hd = Math.hypot(x - moon.x, y - moon.y) / haloR;                       // the moon's bright halo
+      if (hd < 1) { const h = hd < .25 ? .9 - (.9 - .25) * hd / .25 : .25 * (1 - (hd - .25) / .75); r += 215 * h; g += 222 * h; b += 236 * h; }
+      if (v > .86) { const k = .45; r *= k; g *= k; b *= k; }                   // rooftops in silhouette at the bottom of the view
+      const o = j * bw + i; R[o] = r * open; Gc[o] = g * open; B[o] = b * open;
     }
-    const fin = mk(c0.width * 4, c0.height * 4), fc = fin.getContext('2d'); fc.imageSmoothingQuality = 'high'; fc.drawImage(c0, 0, 0, fin.width, fin.height);
-    backCan = fin;
+    const blur = (A, rad) => {                                    // separable box blur (edges clamped), run twice ≈ gaussian
+      const T = new Float32Array(n), cl = (v, m) => v < 0 ? 0 : v > m ? m : v, k = 1 / (2 * rad + 1);
+      for (let j = 0; j < bh; j++) {
+        const row = j * bw; let acc = 0;
+        for (let d = -rad; d <= rad; d++) acc += A[row + cl(d, bw - 1)];
+        for (let i = 0; i < bw; i++) { T[row + i] = acc * k; acc += A[row + cl(i + rad + 1, bw - 1)] - A[row + cl(i - rad, bw - 1)]; }
+      }
+      for (let i = 0; i < bw; i++) {
+        let acc = 0;
+        for (let d = -rad; d <= rad; d++) acc += T[cl(d, bh - 1) * bw + i];
+        for (let j = 0; j < bh; j++) { A[j * bw + i] = acc * k; acc += T[cl(j + rad + 1, bh - 1) * bw + i] - T[cl(j - rad, bh - 1) * bw + i]; }
+      }
+    };
+    for (const A of [R, Gc, B]) { blur(A, 4); blur(A, 4); }
+    const u8 = new Uint8Array(n * 4);
+    for (let o = 0; o < n; o++) { u8[o * 4] = Math.min(255, R[o] * 1.12); u8[o * 4 + 1] = Math.min(255, Gc[o] * 1.12); u8[o * 4 + 2] = Math.min(255, B[o] * 1.12); u8[o * 4 + 3] = 255; }
+    backTex = { w: bw, h: bh, data: u8 };
   }
 
   function buildGLMesh() {
     if (!G) return;
-    gcv.width = cv.width; gcv.height = cv.height;
+    G.scale = dpr > 1.5 ? .75 : 1;
+    gcv.width = Math.round(cv.width * G.scale); gcv.height = Math.round(cv.height * G.scale);
     G.data = new Float32Array(P.length * 8); G.z = new Float32Array(P.length); G.z2 = new Float32Array(P.length); G.zt = new Float32Array(P.length); G.idx = new Uint16Array(2 * (ROWS - 1) * (COLS - 1) * 6);
     const idx = [];
     for (let panel = 0; panel < 2; panel++) {
@@ -635,7 +709,7 @@
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, G.idx.byteLength, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, G.vb); gl.bufferData(gl.ARRAY_BUFFER, G.data.byteLength, gl.DYNAMIC_DRAW);
     gl.bindTexture(gl.TEXTURE_2D, G.tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, backCan);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, backTex.w, backTex.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, backTex.data);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const pw = restW * (COLS - 1), ph = P[ROWS * COLS - 1].y - rod.y;
@@ -674,7 +748,7 @@
         d[o + 5] = c / (COLS - 1); d[o + 6] = r / (ROWS - 1); d[o + 7] = ao;
       }
     }
-    if (gcv.width !== cv.width || gcv.height !== cv.height) { gcv.width = cv.width; gcv.height = cv.height; }
+    const gs = G.scale; if (gcv.width !== Math.round(cv.width * gs) || gcv.height !== Math.round(cv.height * gs)) { gcv.width = Math.round(cv.width * gs); gcv.height = Math.round(cv.height * gs); }
     gl.viewport(0, 0, gcv.width, gcv.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(G.pr);
@@ -827,6 +901,7 @@
   function frame(t) {
     requestAnimationFrame(frame);
     if (!visible) { lastT = 0; return; }
+    if (!built) layout();                                         // jumped straight here (#attic link): build now
     const v = Math.hypot(gx - lastX, gy - lastY); lastX = gx; lastY = gy;
     speed += ((grabbed ? v : 0) - speed) * .3;
     // fixed 60 Hz physics: the cloth weighs and swings the same on 60, 120 and 144 Hz screens and on slow phones
@@ -838,18 +913,18 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCan, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawSky(t);
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(frameCan, 0, 0); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(frameCan, fb.x * dpr, fb.y * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawLight(t); drawCurtain();
     ctx.drawImage(vigCan, 0, 0, W, H);
-    // photographic grain over the whole frame (keeps the dark gradients from banding)
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = .09;
-    const gp = ctx.createPattern(grainCan, 'repeat'), ox = reduce ? 0 : Math.random() * 220 | 0, oy = reduce ? 0 : Math.random() * 220 | 0;
-    ctx.translate(-ox, -oy); ctx.fillStyle = gp; ctx.fillRect(0, 0, cv.width + 220, cv.height + 220); ctx.restore();
   }
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }, { rootMargin: '200px' }).observe(sec);
+  const prep = new IntersectionObserver(([e]) => {
+    if (!e.isIntersecting || built) return;
+    prep.disconnect(); prepare();
+  }, { rootMargin: '150% 0px' });
+  prep.observe(sec);
   new IntersectionObserver(([e]) => { if (e.isIntersecting && !gusted) { gusted = true; gust = 1; } }, { threshold: .4 }).observe(sec);
-  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 250); });
+  let rt; addEventListener('resize', () => { if (!built) return; clearTimeout(rt); rt = setTimeout(layout, 250); });
   initGL();
-  layout();
   requestAnimationFrame(frame);
 })();

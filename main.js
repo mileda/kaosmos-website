@@ -54,7 +54,13 @@ if (!reduce) {
     });
   }
 
+  let hidden = false;                                            // the attic is opaque: nothing to draw while it fills the screen
+  const attic = document.getElementById('attic');
+  if (attic) new IntersectionObserver(([e]) => { hidden = e.intersectionRatio > .97 || (e.boundingClientRect.top <= 1 && e.boundingClientRect.bottom >= innerHeight - 1); },
+    { threshold: [0, .5, .9, .97, 1] }).observe(attic);
+
   function frame() {
+    if (hidden) { tickCursor(); requestAnimationFrame(frame); return; }
     const o = field.order, e = o * o * (3 - 2 * o);
     mouse.hold += ((mouse.down ? 1 : 0) - mouse.hold) * (mouse.down ? 0.02 : 0.15);
     const { x: mx, y: my, active, down, hold } = mouse;
@@ -127,13 +133,17 @@ let words = [];                                   // filled when the manifest is
 const manifestEl = document.querySelector('.manifest');
 function tickLetters(blast) {
   if (reduce) return;
-  if (scrollY < innerHeight) tickBodies(letters, blast);
+  // all layout reads first, then all style writes: one layout per frame instead of one per letter
   const m = manifestEl.getBoundingClientRect();
-  if (words.length && m.bottom > 0 && m.top < innerHeight) tickBodies(words, blast);
+  const lists = [];
+  if (scrollY < innerHeight) lists.push(letters);
+  if (words.length && m.bottom > 0 && m.top < innerHeight) lists.push(words);
+  for (const list of lists) for (const L of list) L.r = L.el.getBoundingClientRect();
+  for (const list of lists) tickBodies(list, blast);
 }
 function tickBodies(list, blast) {
   for (const L of list) {
-    const r = L.el.getBoundingClientRect();
+    const r = L.r;
     const cx = r.left + r.width / 2 - L.x, cy = r.top + r.height / 2 - L.y;
     const px = cx + L.x, py = cy + L.y;
     const src = blast || (mouse.active && mouse);

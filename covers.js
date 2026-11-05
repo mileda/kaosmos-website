@@ -71,7 +71,9 @@
   function fail() { sec.classList.remove('webgl'); sec.classList.add('grid'); stage.remove(); return null; }
 
   const tex = cards.map(() => null);
-  cards.forEach((c, i) => {
+  function loadTex(i) {
+    if (tex[i] !== null || i >= n) return;
+    tex[i] = false;                                               // loading
     const img = new Image();
     img.onload = () => {
       const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
@@ -79,9 +81,15 @@
       [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(k => gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE));
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       tex[i] = t;
+      if (i + 1 < n) loadTex(i + 1);                              // then the next one, so they stream in order without a burst
     };
-    img.src = c.querySelector('img').src;
-  });
+    const jpg = cards[i].querySelector('img').src;               // stage texture: the 1200px WebP (a third of the JPEG), JPEG if it fails
+    img.onerror = () => { img.onerror = null; img.src = jpg; };
+    img.src = jpg.replace(/\.jpg$/, '-1200.webp');
+  }
+  // the 13 covers are ~2 MB: fetch them when the visitor heads towards the discography, not with the first page load
+  const near = new IntersectionObserver(([e]) => { if (e.isIntersecting) { near.disconnect(); loadTex(0); } }, { rootMargin: '150% 0px' });
+  near.observe(sec);
 
   function resize() {
     const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -134,6 +142,7 @@
     const k = Math.round(cur);
     if (k !== shown) { shown = k; setMeta(k); }
     if (visible && !seenAlbums.has(k)) { seenAlbums.add(k); window.track?.('album-seen', { album: cards[k].querySelector('.card__title').textContent, position: k + 1 }); }
+    if (visible) { loadTex(i); loadTex(Math.min(i + 1, n - 1)); }   // a click on the list can jump ahead of the stream
     if (!visible || !tex[i]) return;
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex[i]);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex[Math.min(i + 1, n - 1)] || tex[i]);
