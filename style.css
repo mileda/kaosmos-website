@@ -115,13 +115,23 @@ picture { display: contents; }   /* responsive <picture> wrappers don't change t
 .live { padding: 120px var(--pad); }
 .live__head { max-width: 760px; margin-bottom: 80px; }
 .live__head p:last-child { color: var(--muted); }
-.gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(12px, 2vw, 28px); grid-auto-flow: dense; }
+.gallery { display: grid; grid-template-columns: repeat(6, 1fr); gap: clamp(10px, 1.4vw, 20px); grid-auto-flow: dense; max-width: 1280px; }
+.g { cursor: zoom-in; position: relative; }
+.g::after { content: ''; position: absolute; inset: 0; background: rgba(23,24,26,.25); opacity: 0; transition: opacity .35s; pointer-events: none; }
+.g:hover::after, .g:focus-visible::after { opacity: 1; }
+.g:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
 .g { margin: 0; overflow: hidden; }
 .g img { width: 100%; height: 100%; object-fit: cover; aspect-ratio: 3/2; transform: scale(1.15); }
 .g--wide { grid-column: span 2; }
 .g--tall { grid-row: span 2; }
 .g--tall img { aspect-ratio: auto; }
-@media (max-width: 860px) { .gallery { grid-template-columns: 1fr 1fr; } .g--wide { grid-column: span 2; } }
+@media (max-width: 860px) {   /* phones: an even 3-column contact sheet, the first photo double width (11 photos = 4 full rows) */
+  .gallery { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .g--wide, .g--tall { grid-column: auto; grid-row: auto; }
+  .g img, .g--tall img { aspect-ratio: 1; }
+  .gallery .g:first-child { grid-column: span 2; }
+  .gallery .g:first-child img { aspect-ratio: auto; position: absolute; inset: 0; height: 100%; }
+}
 
 /* about */
 .about {
@@ -393,3 +403,20 @@ h2 em { font-size: 1.12em; color: #ece6dc; }
 .latest h2.t-wide { font-weight: 200; letter-spacing: .32em; margin-right: -.32em; }
 .latest__line { font-size: clamp(20px, 2vw, 28px); color: #cfcac2; margin: -.2em 0 26px; }
 .latest__line em { font-family: "Instrument Serif", "Times New Roman", serif; font-style: italic; }
+
+/* lightbox for the live photos */
+html.lb-open { overflow: hidden; }
+.lb { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: rgba(10,10,12,.94); opacity: 0; transition: opacity .35s; }
+.lb.on { opacity: 1; }
+.lb[hidden] { display: none; }   /* the grid display above would otherwise override [hidden] and block the page */
+.lb__fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; height: 100%; justify-content: center; padding: 64px clamp(16px, 7vw, 120px) 56px; box-sizing: border-box; cursor: zoom-out; }
+.lb__img { max-width: 100%; max-height: calc(100vh - 150px); object-fit: contain; opacity: 0; transform: scale(.97); transition: opacity .45s, transform .6s cubic-bezier(.22,.61,.36,1); cursor: default; }
+.lb__img.in { opacity: 1; transform: none; }
+.lb__cap { margin: 0; text-align: center; color: var(--muted); }
+.lb__btn { position: absolute; background: none; border: 1px solid var(--line); color: var(--text); width: 44px; height: 44px; cursor: pointer; font: 300 18px/1 var(--mono); transition: border-color .3s, color .3s; }
+.lb__btn:hover, .lb__btn:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.lb__close { top: 16px; right: 16px; font-size: 24px; }
+.lb__prev { left: 16px; top: 50%; transform: translateY(-50%); }
+.lb__next { right: 16px; top: 50%; transform: translateY(-50%); }
+.lb__count { position: absolute; top: 28px; left: 20px; margin: 0; }
+@media (max-width: 640px) { .lb__prev, .lb__next { top: auto; bottom: 14px; transform: none; } .lb__fig { padding-bottom: 72px; } }
