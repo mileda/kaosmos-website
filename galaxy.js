@@ -76,14 +76,14 @@ const STAR_VS = `
     vec3 p = vec3(cos(th) * aR, aY, sin(th) * aR);
     vec2 dm = p.xz - uMouse.xz; float f = uMouseK * exp(-dot(dm, dm) / 5.);     // the pointer stirs the disc
     float sw = sin(uTime * 2.2 + aSeed * 6.283);
-    p.xz += dm * f * .55 + vec2(-dm.y, dm.x) * f * .25; p.y += f * ((aSeed - .5) * 1.6 + sw * .25);
+    p.xz += dm * f * .38 + vec2(-dm.y, dm.x) * f * .16; p.y += f * ((aSeed - .5) * 1.1 + sw * .18);
     vec4 mv = modelViewMatrix * vec4(p, 1.);
     gl_Position = projectionMatrix * mv;
     float tw = .78 + .22 * sin(uTime * (1.3 + aSeed * 3.) + aSeed * 61.);
     float s = aSize * uPR * uScale * 150. / -mv.z;
     vFade = clamp(s / 1.6, 0., 1.);                              // sub-pixel stars dim instead of flickering
     gl_PointSize = clamp(s, 1.2, 70.);
-    vColor = aColor * tw * (1. + f * 2.6);
+    vColor = aColor * tw * (1. + f * 1.8);
   }`;
 const STAR_FS = `
   uniform float uBright;
@@ -397,7 +397,7 @@ WORLDS.forEach(w => {
     s.position.set(gauss() * .9, gauss() * .5, gauss() * .9); s.material.rotation = rnd() * 6.28; g.add(s);
   }
   g.add(sprite(GLOW, new THREE.Color(1, .85, .8).multiplyScalar(3), 1.5));
-  const bm = beams('#ffd8d0', 3.2, .55, 3); g.add(bm);
+  const bm = beams('#ffd8d0', 3.6, .64, 3); bm.children[0].material.uniforms.uC.value.multiplyScalar(1.3); g.add(bm);
   const shots = ['p04', 'p12', 'p02', 'p09', 'p13'].map((p, i) => {
     const s = sprite(tex(`img/photos/${p}-960.webp`), new THREE.Color(1, 1, 1), 1, false, .92); s.scale.set(.62, .41, 1);
     s.userData.a = i / 5 * Math.PI * 2; g.add(s); return s;
@@ -419,7 +419,7 @@ WORLDS.forEach(w => {
   const ga = sprite(GLOW, new THREE.Color(1, .9, .8).multiplyScalar(2.2), 2.6), gb = sprite(GLOW, new THREE.Color(1, .35, .2).multiplyScalar(1.6), 1.5);
   a.add(ga); b.add(gb); g.add(a, b);
   const bridge = sprite(PUFF, new THREE.Color(1, .45, .3).multiplyScalar(.5), 1.6, true, .6); g.add(bridge);   // matter streaming between them
-  const portrait = sprite(tex('img/photos/p08-960.webp'), new THREE.Color(1, 1, 1), 1, false, .9); portrait.scale.set(.5, .62, 1); g.add(portrait);
+  const portrait = sprite(tex('img/photos/p08-960.webp'), new THREE.Color(1, 1, 1), 1, false, .9); portrait.scale.set(.5, .62, 1); portrait.visible = false;
   anims.push((t, k) => {
     const ang = t * (.35 + k * .8);
     a.position.set(Math.cos(ang) * .38, 0, Math.sin(ang) * .38); b.position.set(-Math.cos(ang) * .66, 0, -Math.sin(ang) * .66);
@@ -437,8 +437,7 @@ WORLDS.forEach(w => {
   const bm = beams('#bcd4ff', 3.4, .16, 2); bm.children[1].rotation.x = Math.PI; axis.add(bm);
   // the transmission: a wide searchlight aimed out of the galaxy, with packets of light and wavefronts riding it
   const tx = new THREE.Group(); tx.rotation.set(-.35, 0, -.55); g.add(tx);
-  const LEN = 11, send = beams('#9fc4ff', LEN, 1.1, 1); tx.add(send);
-  const core2 = beams('#e4eeff', LEN, .22, 1); tx.add(core2);
+  const LEN = 11;
   const packets = Array.from({ length: 9 }, () => { const s = sprite(GLOW, new THREE.Color(.8, .9, 1).multiplyScalar(2.4), .5); tx.add(s); return s; });
   const fronts = Array.from({ length: 5 }, () => {
     const m = new THREE.Mesh(new THREE.RingGeometry(.9, 1, 64), new THREE.MeshBasicMaterial({ color: new THREE.Color(.55, .75, 1), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
