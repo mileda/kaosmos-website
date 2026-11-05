@@ -13,7 +13,7 @@
   let W, H, dpr, win, rod, moon, COLS, ROWS, P = [], C = [], restW;
   let bgCan, skyCan, cloudCan, moonCan, glassCan, frameCan, vigCan, grainCan, beacons = [];
   let twinkle = [], drops = [], motes = [], shoot = null, cover = new Float32Array(48), backCan;
-  let visible = false, grabbed = null, gx = 0, gy = 0, lastX = 0, lastY = 0, speed = 0, travel = 0, openness = 0, played = false;
+  let gust = 0, gusted = false, visible = false, grabbed = null, gx = 0, gy = 0, lastX = 0, lastY = 0, speed = 0, travel = 0, openness = 0, played = false;
 
   // ---------- noise ----------
   let seed = 7;
@@ -315,14 +315,15 @@
   }
 
   function step(t) {
-    const wind = reduce ? 0 : .03;
+    const wind = reduce ? 0 : .045 + gust * .32;
     for (const p of P) {
       if (p === grabbed) { p.px = p.x; p.py = p.y; p.x += (gx - p.x) * .2; p.y += (gy - p.y) * .2; continue; }   // weight: lags the hand
       const vx = (p.x - p.px) * (p.ring ? .7 : .972), vy = (p.y - p.py) * .972;
       p.px = p.x; p.py = p.y;
       if (p.ring) { p.x += vx; p.y = rod.y; continue; }
-      const breeze = Math.sin(t * .0006 + p.r * .18 + p.panel * 2) * Math.sin(t * .00021 + p.c * .7) * wind * (p.r / ROWS);
-      p.x += vx + breeze; p.y += vy + .42 * p.m;
+      const k = p.r / ROWS, w = Math.sin(t * .0011 + p.r * .09 - p.c * .35 + p.panel * 2.1) * .7 + Math.sin(t * .00047 + p.c * .6 + p.panel) * .3;
+      const breeze = w * wind * k * (1 + .4 * Math.sin(t * .0003 + p.panel * 3));   // travelling ripples, stronger towards the hem
+      p.x += vx + breeze; p.y += vy + .42 * p.m - Math.abs(w) * wind * k * .25;     // the draught lifts the hem a little
     }
     for (let k = 0; k < 12; k++) {
       for (const [a, b, rest] of C) {
@@ -414,7 +415,7 @@
     let avg = 0;
     for (let i = 0; i < n; i++) {
       const x0 = win.x + win.w * i / n, x1 = win.x + win.w * (i + 1) / n;
-      const pass = 1 - cover[i] * .9; avg += pass / n;                            // the curtain dims what passes
+      const pass = 1 - cover[i] * .72; avg += pass / n;                            // the curtain dims what passes
       const mullion = Math.abs((x0 + x1) / 2 - (win.x + win.w / 2)) < win.w / n * .9 ? .25 : 1;
       const a = .075 * pass * mullion;
       // volumetric shaft through the room
@@ -445,7 +446,7 @@
       if (!reduce) { m.x += Math.sin(t * .0003 + m.ph) * .07; m.y += m.v; if (m.y > floor) { m.y = bottom; m.x = win.x - win.w * .55 + Math.random() * win.w * 1.5; } }
       const tt = (m.y - bottom) / (floor - bottom), sx = m.x - shift * 1.1 * tt, i = Math.floor((sx - win.x) / win.w * n);
       if (i < 0 || i >= n) continue;
-      const a = (1 - cover[i] * .92) * (1 - tt) * .55 * m.b * (.6 + .4 * Math.sin(t * .002 + m.ph));
+      const a = (1 - cover[i] * .72) * (1 - tt) * .55 * m.b * (.6 + .4 * Math.sin(t * .002 + m.ph));
       if (a < .02) continue;
       ctx.fillStyle = `rgba(205,218,245,${a})`; ctx.beginPath(); ctx.arc(m.x, m.y, m.s * .5, 0, 7); ctx.fill();
     }
@@ -522,7 +523,7 @@
         const ox = mx + nx * 10, [lo, hi] = other[Math.min(ROWS - 1, p.r)];
         if (!ny && ox > lo && ox < hi) continue;                                  // the other panel covers this side
         if (inWindow(ox, my + ny * 10) < .05) continue;                           // nothing but frame/wall beyond it
-        const a = .5 * w * (.3 + .7 * Math.exp(-Math.hypot(mx - moon.x, my - moon.y) / (win.w * .7)));
+        const a = .28 * w * (.3 + .7 * Math.exp(-Math.hypot(mx - moon.x, my - moon.y) / (win.w * .7)));
         ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
         ctx.lineWidth = 9; ctx.strokeStyle = `rgba(150,180,240,${a * .22})`; ctx.stroke();
         ctx.lineWidth = 1.8; ctx.strokeStyle = `rgba(195,212,248,${a})`; ctx.stroke();
@@ -569,16 +570,20 @@
       float slub = vn(floor(t.x * .35) * 7.13 + t.y * .02) * .9 + vn(t.y * .03 + t.x * .004) * .1;
       float hem = step(uHem, vUV.y) + step(vUV.x, .012) + step(.988, vUV.x);
       float dens = 1.0 + .45 * slub - .1 * weave + hem * .9;
-      float path = 1. / max(facing, .1);                            // oblique fabric = longer path through it
+      float path = min(1. / max(facing, .2), 4.);                   // oblique fabric = longer path through it (bounded: no black quads)
       vec3 back = texture2D(uBack, vP / uView).rgb;
       back = mix(vec3(dot(back, vec3(.3, .55, .15))), back, .55);     // dense linen scatters and mutes the colour behind it
-      vec3 trans = back * exp(-dens * path * .95) * vec3(1., .965, .91) * 5.2;
-      vec3 L = normalize(vec3(-.35, .5, .8));                       // faint room light from the front, floor bounce from below
-      vec3 front = vec3(.05, .052, .058) * (.35 + .65 * max(dot(n, L), 0.)) + vec3(.012, .013, .016) * max(n.y, 0.);
-      float sheen = pow(1. - facing, 3.);                           // fibres catch the window light on fold crests
-      vec3 col = (trans + front + back * sheen * .18) * (1. - vAO * .7) * (.95 + .05 * weave);
-      float a = clamp(.92 + .04 * path + hem, 0., 1.);
-      gl_FragColor = vec4(col * a, a);
+      // semi-sheer linen: the more fabric along the line of sight (folds, stacked layers, hems), the more window light it
+      // scatters towards us and the less of the view gets through, so folds glow brighter instead of going black
+      float amount = 1. - exp(-dens * path * 1.15);
+      vec3 glow = back * amount * vec3(1., .97, .93) * 2.3;
+      vec3 L = normalize(vec3(-.35, .5, .8));
+      vec3 front = vec3(.07, .072, .08) * (.35 + .65 * max(dot(n, L), 0.)) * amount;
+      float sheen = pow(1. - facing, 2.);
+      vec3 col = (glow * (1. + sheen * .6) + front) * (1. - vAO * .25) * (.94 + .06 * weave);
+      float a = clamp(amount * 1.04, .62, .96);
+      a = max(a, max(col.r, max(col.g, col.b)));                    // keep the output validly premultiplied
+      gl_FragColor = vec4(col, a);
     }`;
 
   function initGL() {
@@ -658,7 +663,7 @@
         const vx = D.x - U.x, vy = D.y - U.y, vz = z2[b + rd * COLS + c] - z2[b + ru * COLS + c];
         let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
         const l = Math.hypot(nx, ny, nz) || 1; if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
-        const ao = Math.min(1, Math.max(0, ((z2[b + r * COLS + cl] + z2[b + r * COLS + cr]) / 2 - z2[i]) / restW * 2));   // crease valleys
+        const ao = Math.min(1, Math.max(0, ((z2[b + r * COLS + cl] + z2[b + r * COLS + cr]) / 2 - z2[i]) / restW * 1.2));   // crease valleys
         const o = i * 8, p = P[i];
         d[o] = p.x; d[o + 1] = p.y; d[o + 2] = nx / l; d[o + 3] = ny / l; d[o + 4] = nz / l;
         d[o + 5] = c / (COLS - 1); d[o + 6] = r / (ROWS - 1); d[o + 7] = ao;
@@ -809,6 +814,7 @@
     if (!visible) return;
     const v = Math.hypot(gx - lastX, gy - lastY); lastX = gx; lastY = gy;
     speed += ((grabbed ? v : 0) - speed) * .3;
+    gust *= .992;                                                                // the first draught dies down over a few seconds
     step(t); updateSound(); measureCover();
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCan, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -822,6 +828,7 @@
     ctx.translate(-ox, -oy); ctx.fillStyle = gp; ctx.fillRect(0, 0, cv.width + 220, cv.height + 220); ctx.restore();
   }
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }, { rootMargin: '200px' }).observe(sec);
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && !gusted) { gusted = true; gust = 1; } }, { threshold: .4 }).observe(sec);
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 250); });
   initGL();
   layout();
