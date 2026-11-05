@@ -123,13 +123,15 @@ const OLD = [1.0, .78, .52], YOUNG = [.62, .76, 1.0], WHITE = [1, .96, .9], HII 
 // A face-on spiral made with Nano Banana. It lights the disc, and it is the map the 3D stars, star-forming
 // regions and dust are drawn from, so the volume and the photo line up exactly.
 const DISC = 30;                                                 // world size of the photo square (the galaxy fills ~80%: radius ≈ R)
-const galImg = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = 'img/universe/galaxy-1024.webp'; });
+const galImg = await new Promise(res => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => res(im); im.onerror = () => res(null); im.src = 'img/universe/galaxy-1024.webp'; });
 const PN = 256;
 let photo = null;
 if (galImg) {
   const c = document.createElement('canvas'); c.width = c.height = PN;
   const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(galImg, 0, 0, PN, PN);
-  const d = x.getImageData(0, 0, PN, PN).data, n = PN * PN, lum = new Float32Array(n);
+  let d0 = null; try { d0 = x.getImageData(0, 0, PN, PN).data; } catch (e) { /* a CDN without CORS: fall back to the procedural galaxy */ }
+  if (d0) {
+  const d = d0, n = PN * PN, lum = new Float32Array(n);
   for (let i = 0; i < n; i++) lum[i] = (d[i * 4] * .3 + d[i * 4 + 1] * .55 + d[i * 4 + 2] * .15) / 255;
   const blur = (src, k) => {                                     // separable box blur, for "darker than its surroundings"
     const a = new Float32Array(n), b = new Float32Array(n);
@@ -146,6 +148,7 @@ if (galImg) {
     hii: cdf(i => { const r = d[i * 4], g = d[i * 4 + 1]; return Math.max(0, r - g - 45) ** 2 * (rad(i) > .12 ? 1 : 0); }),
     dust: cdf(i => { const v = soft[i] - lum[i] - .025; return v > 0 && rad(i) < .85 && soft[i] > .06 ? v * v : 0; }),
   };
+}
 }
 function fromPhoto(cdf) {                                        // a random point weighted by the given map
   const t = rnd() * cdf[cdf.length - 1]; let lo = 0, hi = cdf.length - 1;
