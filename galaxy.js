@@ -438,7 +438,7 @@ WORLDS.forEach(w => {
   // the transmission: a wide searchlight aimed out of the galaxy, with packets of light and wavefronts riding it
   const tx = new THREE.Group(); tx.rotation.set(-.35, 0, -.55); g.add(tx);
   const LEN = 11;
-  const packets = Array.from({ length: 9 }, () => { const s = sprite(GLOW, new THREE.Color(.8, .9, 1).multiplyScalar(2.4), .5); tx.add(s); return s; });
+  const packets = [];
   const fronts = Array.from({ length: 5 }, () => {
     const m = new THREE.Mesh(new THREE.RingGeometry(.9, 1, 64), new THREE.MeshBasicMaterial({ color: new THREE.Color(.55, .75, 1), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
     m.rotation.x = Math.PI / 2; tx.add(m); return m;
