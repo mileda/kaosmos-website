@@ -19,7 +19,7 @@ try {
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.setClearColor(0x020306, 1);
-let DPR = Math.min(devicePixelRatio || 1, phone ? 1.5 : 1.75);
+let DPR = Math.min(devicePixelRatio || 1, phone ? 1.25 : 1.75);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 2000);
@@ -68,19 +68,22 @@ const R = 12;                                                   // disc radius
 
 const STAR_VS = `
   attribute float aR, aTheta, aY, aSize, aSeed; attribute vec3 aColor;
-  uniform float uTime, uPR, uScale, uSpin;
+  uniform float uTime, uPR, uScale, uSpin, uMouseK; uniform vec3 uMouse;
   varying vec3 vColor; varying float vFade;
   void main(){
     float omega = 1. / (2. + aR);                                // inner stars orbit faster: the arms wind slowly
     float th = aTheta + uTime * omega * uSpin;
     vec3 p = vec3(cos(th) * aR, aY, sin(th) * aR);
+    vec2 dm = p.xz - uMouse.xz; float f = uMouseK * exp(-dot(dm, dm) / 5.);     // the pointer stirs the disc
+    float sw = sin(uTime * 2.2 + aSeed * 6.283);
+    p.xz += dm * f * .55 + vec2(-dm.y, dm.x) * f * .25; p.y += f * ((aSeed - .5) * 1.6 + sw * .25);
     vec4 mv = modelViewMatrix * vec4(p, 1.);
     gl_Position = projectionMatrix * mv;
     float tw = .78 + .22 * sin(uTime * (1.3 + aSeed * 3.) + aSeed * 61.);
     float s = aSize * uPR * uScale * 150. / -mv.z;
     vFade = clamp(s / 1.6, 0., 1.);                              // sub-pixel stars dim instead of flickering
     gl_PointSize = clamp(s, 1.2, 70.);
-    vColor = aColor * tw;
+    vColor = aColor * tw * (1. + f * 2.6);
   }`;
 const STAR_FS = `
   uniform float uBright;
@@ -184,8 +187,8 @@ function starAt(kind) {
   const bright = rnd() < .012 ? 2.6 : 1;
   return { r, t, y, size: (.28 + rnd() ** 3 * 1.3) * bright, c: c.map(v => v * (inArm ? 1 : .7) * (1 - r / (R * 1.6))) };
 }
-const NSTAR = reduce ? 60000 : phone ? 70000 : 160000;
-const starMat = new THREE.ShaderMaterial({ uniforms: { ...U, uSpin: { value: .05 }, uBright: { value: 160000 / (reduce ? 60000 : phone ? 70000 : 160000) * .085 } }, vertexShader: STAR_VS, fragmentShader: STAR_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+const NSTAR = reduce ? 60000 : phone ? 55000 : 160000;
+const starMat = new THREE.ShaderMaterial({ uniforms: { ...U, uSpin: { value: .05 }, uMouse: { value: new THREE.Vector3(999, 0, 999) }, uMouseK: { value: 0 }, uBright: { value: 160000 / (reduce ? 60000 : phone ? 55000 : 160000) * .085 } }, vertexShader: STAR_VS, fragmentShader: STAR_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
 starMat.uniforms.uTime = U.uTime; starMat.uniforms.uPR = U.uPR; starMat.uniforms.uScale = U.uScale;
 const stars = galaxyLayer(NSTAR, photo
   ? i => starAt(i < NSTAR * .06 ? 'bulge' : i < NSTAR * .74 ? 'photo' : 'disc')
@@ -208,7 +211,7 @@ galaxy.add(nebulae);
 
 // dust lanes on the inner edge of each arm (drawn after the stars, darkening them)
 const dustMat = new THREE.ShaderMaterial({ uniforms: starMat.uniforms, vertexShader: STAR_VS, fragmentShader: DUST_FS, transparent: true, depthWrite: false, blending: THREE.NormalBlending });
-const NDUST = photo ? (phone ? 15000 : 32000) : phone ? 14000 : 34000;
+const NDUST = photo ? (phone ? 9000 : 32000) : phone ? 14000 : 34000;
 const lanePhase = Array.from({ length: ARMS * 3 }, () => rnd() * 6.283);
 const laneDensity = (r, arm) => {                                 // patchy along the arm: gaps and thick knots
   const p = lanePhase.slice(arm * 3, arm * 3 + 3);
@@ -242,7 +245,7 @@ const coreGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: n
 coreGlow.scale.setScalar(4.2); galaxy.add(coreGlow);
 const coreHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: SOFT, color: new THREE.Color(.9, .55, .35).multiplyScalar(.09), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
 coreHalo.scale.setScalar(16); galaxy.add(coreHalo);
-if (photo) { coreGlow.material.color.multiplyScalar(.22); coreHalo.material.color.multiplyScalar(.4); }
+if (photo) { coreGlow.material.color.multiplyScalar(.1); coreHalo.material.color.multiplyScalar(.3); }
 
 // the photograph itself, as the light of the disc; it turns with the same differential rotation as the stars
 const discMat = new THREE.ShaderMaterial({
@@ -258,7 +261,7 @@ const discMat = new THREE.ShaderMaterial({
       vec2 q = vec2(cos(th), sin(th)) * r;
       vec2 uv0 = vec2(g.x, -g.y) / ${DISC}. + .5, uv = vec2(q.x, -q.y) / ${DISC}. + .5;
       vec3 c = textureGrad(uMap, uv, dFdx(uv0), dFdy(uv0)).rgb;      // gradients from the unrotated uv: no seam at the atan wrap
-      c *= mix(.5, 1., smoothstep(.4, 4., r));                         // the photo's core is burnt in: leave headroom for bloom
+      c *= mix(.3, 1., smoothstep(.3, 4.5, r));                         // the photo's core is burnt in: leave headroom for bloom
       gl_FragColor = vec4(c * uGain * smoothstep(.02, .4, vFace), 1.);
     }` });
 const disc = new THREE.Mesh(new THREE.PlaneGeometry(DISC, DISC), discMat);
@@ -266,6 +269,7 @@ disc.rotation.x = -Math.PI / 2; disc.renderOrder = -1; disc.visible = !!photo;
 galaxy.add(disc);
 
 // ---------- the far sky: distant stars and a faint nebular background ----------
+const skyGroup = new THREE.Group(); scene.add(skyGroup);
 {
   const n = phone ? 4000 : 9000, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -279,7 +283,7 @@ galaxy.add(disc);
     vertexShader: `attribute vec3 aColor; attribute float aSize; uniform float uPR; varying vec3 vC;
       void main(){ vC = aColor; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); gl_PointSize = aSize * uPR; }`,
     fragmentShader: `varying vec3 vC; void main(){ float d = length(gl_PointCoord - .5); gl_FragColor = vec4(vC, smoothstep(.5, .1, d)); }` });
-  const sky = new THREE.Points(g, m); sky.frustumCulled = false; scene.add(sky);
+  const sky = new THREE.Points(g, m); sky.frustumCulled = false; skyGroup.add(sky);
 
   const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: U,
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
@@ -292,7 +296,7 @@ galaxy.add(disc);
         col += smoothstep(.55, .85, n) * vec3(.05, .016, .02) + smoothstep(.6, .9, n2) * vec3(.012, .02, .045);
         gl_FragColor = vec4(col, 1.);
       }` });
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), skyMat));
+  skyGroup.add(new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), skyMat));
 }
 
 // ---------- the four worlds ----------
@@ -357,7 +361,7 @@ const extras = [];                                                // other per-f
 
 // far nebulae hanging in the sky behind the galaxy: depth and colour on the way out
 [[NEB_RED, [-220, 70, -330], 230, .55, .4], [NEB_TEAL, [300, -60, -160], 260, .5, 2.1], [NEB_TEAL, [-260, -120, 260], 190, .3, 4], [NEB_RED, [240, 140, 280], 170, .28, 1.2]].forEach(([m, p, size, o, rot]) => {
-  const s = sprite(m, new THREE.Color(1, 1, 1), size, true, o); s.position.set(...p); s.material.rotation = rot; scene.add(s);
+  const s = sprite(m, new THREE.Color(1, 1, 1), size, true, o); s.position.set(...p); s.material.rotation = rot; skyGroup.add(s);
 });
 WORLDS.forEach(w => {
   const g = new THREE.Group(); g.position.set(...w.pos); worldsGroup.add(g); w.group = g;
@@ -431,13 +435,36 @@ WORLDS.forEach(w => {
   extras.push(t => { neb.material.rotation = -t * .012; });
   const axis = new THREE.Group(); axis.rotation.z = .5; g.add(axis);
   const bm = beams('#bcd4ff', 3.4, .16, 2); bm.children[1].rotation.x = Math.PI; axis.add(bm);
+  // the transmission: a wide searchlight aimed out of the galaxy, with packets of light and wavefronts riding it
+  const tx = new THREE.Group(); tx.rotation.set(-.35, 0, -.55); g.add(tx);
+  const LEN = 11, send = beams('#9fc4ff', LEN, 1.1, 1); tx.add(send);
+  const core2 = beams('#e4eeff', LEN, .22, 1); tx.add(core2);
+  const packets = Array.from({ length: 9 }, () => { const s = sprite(GLOW, new THREE.Color(.8, .9, 1).multiplyScalar(2.4), .5); tx.add(s); return s; });
+  const fronts = Array.from({ length: 5 }, () => {
+    const m = new THREE.Mesh(new THREE.RingGeometry(.9, 1, 64), new THREE.MeshBasicMaterial({ color: new THREE.Color(.55, .75, 1), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    m.rotation.x = Math.PI / 2; tx.add(m); return m;
+  });
+  const flash = sprite(GLOW, new THREE.Color(.7, .85, 1), 2.4, true, 0); g.add(flash);
+  extras.push(t => {
+    tx.rotation.y = Math.sin(t * .13) * .5;                        // the dish slowly scans the sky
+    const cyc = t % 4;                                               // every 4 s: a burst of three ("· · ·")
+    packets.forEach((s, i) => {
+      const burst = (i / 3) | 0, j = i % 3, u = (cyc - j * .22 + burst * 4 / 3) % 4 / 2.2;   // three bursts in flight
+      const on = u >= 0 && u < 1;
+      s.visible = on; if (!on) return;
+      s.position.set(0, u * LEN, 0); s.material.opacity = (1 - u) * (u < .05 ? u / .05 : 1);
+      s.scale.setScalar(.35 + u * .5);
+    });
+    fronts.forEach((m, i) => { const u = ((t * .28 + i / fronts.length) % 1); m.position.set(0, u * LEN, 0); m.scale.setScalar(.15 + u * 1.05); m.material.opacity = (1 - u) * .35; });
+    flash.material.opacity = Math.max(0, 1 - (cyc % (4 / 3)) * 4) * .5;
+  });
   const rings = Array.from({ length: 4 }, () => {
     const m = new THREE.Mesh(new THREE.RingGeometry(.96, 1, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(.6, .75, 1), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
     m.rotation.x = -Math.PI / 2; g.add(m); return m;
   });
   anims.push((t, k) => {
     axis.rotation.y = t * (2.2 + k * 3);
-    rings.forEach((m, i) => { const u = ((t * .35 + i / rings.length) % 1); m.scale.setScalar(.2 + u * 2.4); m.material.opacity = (1 - u) * .5 * (.6 + k); });
+    rings.forEach((m, i) => { const u = ((t * .5 + i / rings.length) % 1); m.scale.setScalar(.2 + u * 2.4); m.material.opacity = (1 - u) * .5 * (.6 + k); });
   });
 }
 
@@ -454,11 +481,16 @@ const lens = new ShaderPass({
     void main(){
       vec2 c = vUv - .5; float d = length(c * vec2(uAspect, 1.));
       vec3 col = vec3(0.);
+      if (uWarp < .01) {                                              // at rest: one tap, just the colour fringe
+        float ca = .0016 * d;
+        col = vec3(texture2D(tDiffuse, .5 + c * (1. + ca)).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, .5 + c * (1. - ca)).b);
+      } else {
       float amt = uWarp * .09;                                       // zoom streaks while flying
       for (int i = 0; i < 10; i++){ float s = 1. - amt * float(i) / 9.; vec2 uv = .5 + c * s;
         float ca = .0016 * (1. + uWarp * 8.) * d;
         col += vec3(texture2D(tDiffuse, .5 + (uv - .5) * (1. + ca)).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, .5 + (uv - .5) * (1. - ca)).b); }
       col /= 10.;
+      }
       col *= mix(1., smoothstep(1.05, .25, d), .75);
       col += (h(vUv * 1000. + fract(uTime) * 61.) - .5) * .028;
       gl_FragColor = vec4(col, 1.);
@@ -515,6 +547,7 @@ let hovered = null, drag = null, moved = 0, pinch = 0;
 const pointers = new Map();
 canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); drag = { x: e.clientX, y: e.clientY }; moved = 0; });
 canvas.addEventListener('pointermove', e => {
+  stirAt = performance.now();
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   const p = pointers.get(e.pointerId);
   if (p && !flight) {
@@ -632,14 +665,15 @@ const introEl = document.getElementById('intro');
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setPixelRatio(DPR); renderer.setSize(w, h, false); composer.setPixelRatio(DPR); composer.setSize(w, h);
-  bloom.resolution.set(w / 2, h / 2);
+  bloom.resolution.set(w / (phone ? 3 : 2), h / (phone ? 3 : 2));
   camera.aspect = w / h; camera.updateProjectionMatrix(); U.uPR.value = DPR; U.uScale.value = h / 900; lens.uniforms.uAspect.value = w / h;
   goal.dist = Math.min(goal.dist, 46);
 }
 addEventListener('resize', resize);
 function wake() { if (!raf && !document.hidden) raf = requestAnimationFrame(frame); }
 document.addEventListener('visibilitychange', wake);
-const tmp = new THREE.Vector3(), par = { x: 0, y: 0 };
+const tmp = new THREE.Vector3(), par = { x: 0, y: 0 }, inv = new THREE.Matrix4(), lray = new THREE.Ray();
+let stirAt = -1e9;
 function frame(now) {
   raf = 0; if (paused) return;
   const dt = Math.min(clock.getDelta(), .05); U.uTime.value += dt; lens.uniforms.uTime.value = U.uTime.value;
@@ -692,6 +726,16 @@ function frame(now) {
     const hv = hit ? hit.object.userData.world : (labelsEl.matches(':hover') ? hovered : null);
     hovered = hv; canvas.style.cursor = hv ? 'pointer' : drag ? 'grabbing' : 'grab';
   }
+  // the pointer on the disc plane, in the galaxy's own space: stars nearby part and brighten
+  {
+    const want = !flight && performance.now() - stirAt < 1600 ? 1 : 0, mu = starMat.uniforms;
+    mu.uMouseK.value += (want - mu.uMouseK.value) * (1 - Math.exp(-dt * (want ? 4 : 1.2)));
+    if (want) {
+      ray.setFromCamera(ndc, camera); inv.copy(galaxy.matrixWorld).invert(); lray.copy(ray.ray).applyMatrix4(inv);
+      if (Math.abs(lray.direction.y) > 1e-3) { const k = -lray.origin.y / lray.direction.y; if (k > 0) mu.uMouse.value.lerp(lray.at(k, tmp), 1 - Math.exp(-dt * 10)); }
+    }
+  }
+  skyGroup.rotation.set(par.y * .05, -par.x * .08, 0);
   placeLabels();
   composer.render();
   // keep it smooth on slow GPUs: lower the resolution if frames run long
