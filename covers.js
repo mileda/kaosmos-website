@@ -16,11 +16,11 @@
   const stage = document.createElement('div');
   stage.className = 'cover-stage';
   stage.innerHTML = `
-    <ol class="cs-list" lang="en">${cards.map((c, i) => `<li><button type="button" data-i="${i}"><span>${String(i + 1).padStart(2, '0')}</span>${c.querySelector('.card__title').textContent}</button></li>`).join('')}</ol>
+    <ol class="cs-list" lang="en" translate="no">${cards.map((c, i) => `<li><button type="button" data-i="${i}"><span>${String(i + 1).padStart(2, '0')}</span>${c.querySelector('.card__title').textContent}</button></li>`).join('')}</ol>
     <a class="cs-view" target="_blank" rel="noopener"></a>
     <div class="cs-meta">
       <p class="cs-idx"><b>01</b> / ${String(n).padStart(2, '0')}</p>
-      <h3 class="cs-title" lang="en"></h3>
+      <h3 class="cs-title" lang="en" translate="no"></h3>
       <p class="cs-sub label"></p>
       <p class="cs-cta label">bandcamp ↗</p>
     </div>`;

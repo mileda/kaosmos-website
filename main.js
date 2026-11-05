@@ -159,6 +159,21 @@ function tickBodies(list, blast) {
   }
 }
 
+// ---------- Mobile menu ----------
+(() => {
+  const nav = document.querySelector('.nav'), btn = nav.querySelector('.nav__toggle'), label = btn.firstElementChild;
+  const words = { en: ['menu', 'close'], tr: ['menü', 'kapat'] };
+  const set = open => {
+    nav.classList.toggle('nav--open', open); btn.setAttribute('aria-expanded', open);
+    document.body.style.overflow = open ? 'hidden' : '';
+    label.textContent = words[document.documentElement.lang === 'tr' ? 'tr' : 'en'][open ? 1 : 0];
+  };
+  btn.addEventListener('click', () => set(!nav.classList.contains('nav--open')));
+  nav.querySelectorAll('nav a').forEach(a => a.addEventListener('click', () => set(false)));
+  addEventListener('keydown', e => { if (e.key === 'Escape' && nav.classList.contains('nav--open')) { set(false); btn.focus(); } });
+  document.addEventListener('langchange', () => set(nav.classList.contains('nav--open')));
+})();
+
 // ---------- Custom cursor (mouse only) ----------
 const cur = document.querySelector('.cursor');
 const cp = { x: 0, y: 0 };

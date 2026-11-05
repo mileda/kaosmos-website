@@ -4,6 +4,7 @@
   const audio = document.getElementById('bgm');
   const btn = document.querySelector('.sound');
   const gate = document.querySelector('.gate');
+  const behind = ['.nav', 'main', '.foot'].map(s => document.querySelector(s)).filter(Boolean);
   const store = (k, v) => { try { v === undefined ? (v = localStorage.getItem(k)) : localStorage.setItem(k, v); } catch {} return v; };
   const sess = (k, v) => { try { v === undefined ? (v = sessionStorage.getItem(k)) : sessionStorage.setItem(k, v); } catch {} return v; };
   const MAX = 0.6;
@@ -55,6 +56,7 @@
     gate.classList.add('gate--out');
     setTimeout(() => gate.remove(), 1200);
     document.documentElement.classList.remove('gated');
+    behind.forEach(el => { el.inert = false; });
     document.dispatchEvent(new CustomEvent('entered'));
     if (withSound) setOn(true); else store('sound', 'off');
   }
@@ -62,6 +64,7 @@
   if (!sess('entered')) {
     document.documentElement.classList.add('gated');
     gate.hidden = false;
+    behind.forEach(el => { el.inert = true; });   // keyboard and screen readers stay inside the gate
     gate.querySelector('[data-sound=on]').addEventListener('click', () => enter(true));
     gate.querySelector('[data-sound=off]').addEventListener('click', () => enter(false));
     gate.querySelector('[data-sound=on]').focus();
