@@ -388,3 +388,8 @@ h2 em { font-size: 1.12em; color: #ece6dc; }
 .cs-title { font-size: clamp(26px, 2.8vw, 42px); }
 .latest h2 { letter-spacing: -.02em; }
 @media (max-width: 600px) { .t-indent { padding-left: .9em; } }
+
+/* latest release: ARISEN, set wide like its cover */
+.latest h2.t-wide { font-weight: 200; letter-spacing: .32em; margin-right: -.32em; }
+.latest__line { font-size: clamp(20px, 2vw, 28px); color: #cfcac2; margin: -.2em 0 26px; }
+.latest__line em { font-family: "Instrument Serif", "Times New Roman", serif; font-style: italic; }

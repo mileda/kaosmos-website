@@ -5,11 +5,11 @@ const TR = {
   manLabel: '// sinyal',
   manText: 'Gizemli atmosferik temalar ve sentezleyicilerin uğuldayan soğuk katmanları — dinleyicisini bu gezegende yaşadığımız gerçeklikten özgürleştirmeyi amaçlayan bir müzik.',
   portal: 'kozmosa doğru',
-  latestLabel: '// son yayın · şubat 2023',
+  latestLabel: '// yeni albüm · 5 kasım 2026', latestLine: '<em>çözülüşten oluşa.</em>', length: 'Süre',
   tracks: 'Parça', tags: 'Etiketler', tagsVal: 'ambient · drone · deneysel',
   listen: "Bandcamp’te dinle ve satın al →",
-  discoLabel: '// diskografi 2013 — 2023',
-  discoTitle: '<span class="t-outline">On üç</span> <em>sinyal</em>.',
+  discoLabel: '// diskografi 2013 — 2026',
+  discoTitle: '<span class="t-outline">On dört</span> <em>sinyal</em>.',
   elseLabel: '// başka yerlerde',
   elseTitle: '<span class="t-outline">Başka</span> frekanslardan<br><span class="t-indent"><em>sinyaller</em>.</span>',
   elseText: 'Konuk olduğu parçalar, remiksler ve başka plak şirketlerinden yayınlar.',
@@ -28,7 +28,7 @@ const TR = {
   sound: 'ses', menuOpen: 'menü',
   atticLabel: '// çatı katı', atticTone: '// ses rengi',
 };
-const TR_TYPES = { compilation: 'derleme', single: 'tekli', split: 'ortak albüm', debut: 'ilk albüm', tracks: 'parça' };
+const TR_TYPES = { new: 'yeni', compilation: 'derleme', single: 'tekli', split: 'ortak albüm', debut: 'ilk albüm', tracks: 'parça' };
 
 const EN = {};
 document.querySelectorAll('[data-i18n]').forEach(el => { EN[el.dataset.i18n] = el.innerHTML; });
