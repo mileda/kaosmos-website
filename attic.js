@@ -12,7 +12,7 @@
 
   let W, H, dpr, win, rod, moon, COLS, ROWS, P = [], C = [], restW;
   let bgCan, skyCan, cloudCan, moonCan, glassCan, frameCan, vigCan, grainCan, beacons = [];
-  let twinkle = [], drops = [], shoot = null, cover = new Float32Array(32);
+  let twinkle = [], drops = [], motes = [], shoot = null, cover = new Float32Array(48), backCan;
   let visible = false, grabbed = null, gx = 0, gy = 0, lastX = 0, lastY = 0, speed = 0, travel = 0, openness = 0, played = false;
 
   // ---------- noise ----------
@@ -34,14 +34,15 @@
     W = cv.clientWidth; H = cv.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr;
     const phone = W < 700;
-    COLS = phone ? 14 : 22; ROWS = phone ? 28 : 38;
+    COLS = phone ? 18 : 30; ROWS = phone ? 34 : 52;
     const ww = Math.min(W * (phone ? .7 : .5), 480), wh = Math.min(ww * 1.32, H * (phone ? .55 : .6));
     win = { x: W / 2 - ww / 2, y: H * (phone ? .25 : .16), w: ww, h: wh, inset: ww * .07, ft: Math.max(10, ww * .045) };
     rod = { y: win.y - win.ft - 12, x0: win.x - ww * .24, x1: win.x + ww * 1.24 };
     moon = { x: win.x + win.w * .7, y: win.y + win.h * .24, r: win.w * .05 };
     seed = 7;
-    buildRoom(); buildSky(); buildClouds(); buildMoon(); buildGlass(); buildFrame(); buildVignette(); buildGrain(); buildCloth();
+    buildRoom(); buildSky(); buildClouds(); buildMoon(); buildGlass(); buildFrame(); buildVignette(); buildGrain(); buildCloth(); buildBacklight(); buildGLMesh();
     twinkle = Array.from({ length: 16 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h * .5, s: .6 + rand() * .7, p: rand() * 6.3, f: .5 + rand() * 1.8 }));
+    motes = Array.from({ length: phone ? 40 : 90 }, () => ({ x: win.x - win.w * .55 + rand() * win.w * 1.5, y: win.y + win.h + rand() * (H * .97 - win.y - win.h), v: .04 + rand() * .12, ph: rand() * 6.3, s: .6 + rand() * 1.1, b: .4 + rand() * .6 }));
     drops = Array.from({ length: 5 }, () => ({ x: win.x + rand() * win.w, y: win.y + rand() * win.h, v: .2 + rand() * .5, l: 6 + rand() * 16 }));
   }
 
@@ -131,10 +132,10 @@
       c.fillStyle = g; c.fillRect(0, y0 - sh * .1, sw, sh);
     };
     const layer = (base, hMin, hMax, wMin, wMax, shade, haze, litP, ws) => {
-      const fill = `rgb(${shade.map((v, i) => Math.round(v + (HAZE[i] - v) * haze))})`, lights = [];
-      c.fillStyle = fill;
+      const lights = [];
       for (let x = -rand() * 20; x < sw + 10;) {
-        const w = wMin + rand() * (wMax - wMin), h = hMin + rand() * (hMax - hMin), top = base - h, rt = rand();
+        const w = wMin + rand() * (wMax - wMin), h = hMin + rand() * (hMax - hMin), top = base - h, rt = rand(), tv = (rand() - .5) * 7;
+        c.fillStyle = `rgb(${shade.map((v, i) => Math.max(0, Math.round(v + tv + (HAZE[i] - v) * haze)))})`;   // each block a slightly different facade
         c.fillRect(x, top, w + .6, sh - top);
         if (rt < .3) { c.beginPath(); c.moveTo(x - .4, top + .2); c.lineTo(x + w * .5, top - w * (.14 + rand() * .16)); c.lineTo(x + w + .4, top + .2); c.fill(); }   // pitched roof
         else if (rt < .55) { const bw = w * (.18 + rand() * .3), bx = x + rand() * (w - bw), bh = 1.5 + h * .1; c.fillRect(bx, top - bh, bw, bh); }       // stair / lift housing
@@ -146,7 +147,12 @@
       }
       for (const [lx, ly, fw, fh] of lights) {
         const k = rand(), col = k < .68 ? `255,${176 + rand() * 40 | 0},${104 + rand() * 50 | 0}` : k < .9 ? '232,236,250' : '150,186,255';   // tungsten, LED, a TV
-        c.fillStyle = `rgba(${col},${(.3 + rand() * .6) * (1 - haze * .55)})`; c.fillRect(lx, ly, fw, fh);
+        const a = (.3 + rand() * .6) * (1 - haze * .55);
+        if (a > .55 && rand() < .35) {                                              // bright ones bloom a little, as on a photo
+          const g = c.createRadialGradient(lx + fw / 2, ly + fh / 2, 0, lx + fw / 2, ly + fh / 2, fw * 3.5);
+          g.addColorStop(0, `rgba(${col},${a * .28})`); g.addColorStop(1, `rgba(${col},0)`); c.fillStyle = g; c.fillRect(lx - fw * 3, ly - fw * 3, fw * 7, fh + fw * 6);
+        }
+        c.fillStyle = `rgba(${col},${a})`; c.fillRect(lx, ly, fw, fh);
       }
     };
     layer(sh * .86, sh * .008, sh * .035, 5, 18, [22, 20, 24], .62, .11, .7);
@@ -158,6 +164,13 @@
     veil(sh * .86, .38);
     layer(sh * .915, sh * .025, sh * .08, 12, 38, [13, 12, 15], .22, .09, 1.15);
     veil(sh * .915, .16);
+    c.globalCompositeOperation = 'lighter';                                         // sodium street light rising between the blocks
+    for (let i = 0; i < 7; i++) {
+      const x = rand() * sw, y = sh * (.93 + rand() * .03), r = sw * (.04 + rand() * .05);
+      const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(120,70,30,.22)'); g.addColorStop(1, 'rgba(120,70,30,0)');
+      c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    c.globalCompositeOperation = 'source-over';
     // neighbouring tiled roofs right under the window
     const roof = (x0, x1, eave, ridge, tilt) => {
       c.fillStyle = '#08080b'; c.beginPath();
@@ -283,12 +296,12 @@
   // ---------- cloth ----------
   function buildCloth() {
     P = []; C = [];
-    const pw = win.w * .66; restW = pw / (COLS - 1);
+    const gather = .8, pw = win.w * .66 / gather; restW = pw / (COLS - 1);   // hung with fullness: soft folds even when closed
     const sy = (win.h + win.ft * 2 + 64) / (ROWS - 1);
     [win.x - win.w * .12, win.x + win.w * .46].forEach((x0, panel) => {
       const base = P.length;
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-        const x = x0 + c * restW, y = rod.y + r * sy;
+        const x = x0 + c * restW * gather + Math.sin(c * 1.9) * restW * .05, y = rod.y + r * sy;
         P.push({ x, y, px: x, py: y, ring: r === 0, panel, r, c, m: r >= ROWS - 3 ? 2.2 : 1.1 });   // weighted hem
       }
       const at = (r, c) => P[base + r * COLS + c];
@@ -298,7 +311,7 @@
         if (r < ROWS - 2) C.push([at(r, c), at(r + 2, c), sy * 2]);          // bend resistance: heavier, smoother drape
       }
     });
-    for (let i = 0; i < 160; i++) step(i * 16);                                  // settle before first view
+    for (let i = 0; i < 220; i++) step(i * 16);                                  // settle before first view
   }
 
   function step(t) {
@@ -311,7 +324,7 @@
       const breeze = Math.sin(t * .0006 + p.r * .18 + p.panel * 2) * Math.sin(t * .00021 + p.c * .7) * wind * (p.r / ROWS);
       p.x += vx + breeze; p.y += vy + .42 * p.m;
     }
-    for (let k = 0; k < 8; k++) {
+    for (let k = 0; k < 12; k++) {
       for (const [a, b, rest] of C) {
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || .001;
         if (d <= rest) continue;                                                   // resists stretch, folds freely
@@ -378,37 +391,63 @@
     ctx.restore();
   }
 
-  // how much fabric covers each vertical slice of the window (read back from last frame's curtain layer)
+  // how much fabric covers each vertical slice of the window, from the cloth geometry at ~2/3 window height
   function measureCover() {
-    if (!fab.width) return;
-    const y = Math.round((win.y + win.h * .62) * dpr), x0 = Math.round(win.x * dpr), w = Math.round(win.w * dpr);
-    let data; try { data = fctx.getImageData(x0, y, w, 1).data; } catch { return; }
-    const n = cover.length, per = w / n;
+    const n = cover.length, yM = win.y + win.h * .62, spans = [];
+    for (let panel = 0; panel < 2; panel++) {
+      const b = panel * ROWS * COLS; let best = 0, bd = 1e9;
+      for (let r = 0; r < ROWS; r++) { const d = Math.abs(P[b + r * COLS].y - yM); if (d < bd) { bd = d; best = r; } }
+      let lo = Infinity, hi = -Infinity;
+      for (let c = 0; c < COLS; c++) { const x = P[b + best * COLS + c].x; if (x < lo) lo = x; if (x > hi) hi = x; }
+      spans.push([lo, hi]);
+    }
     for (let i = 0; i < n; i++) {
-      let s = 0, k = 0;
-      for (let x = Math.floor(i * per); x < Math.floor((i + 1) * per); x += 2, k++) s += data[x * 4 + 3];
-      cover[i] += ((k ? s / k / 255 : 0) - cover[i]) * .35;
+      const x = win.x + win.w * (i + .5) / n;
+      let c = 0; for (const [lo, hi] of spans) c += sstep(lo - 3, lo + 3, x) * (1 - sstep(hi - 3, hi + 3, x));
+      cover[i] += (Math.min(1, c) - cover[i]) * .35;
     }
   }
 
-  function drawLight() {
+  function drawLight(t) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     const n = cover.length, top = win.y + win.h * .35, bottom = win.y + win.h, floor = H * .97, shift = -win.w * .42;
+    let avg = 0;
     for (let i = 0; i < n; i++) {
       const x0 = win.x + win.w * i / n, x1 = win.x + win.w * (i + 1) / n;
-      const pass = 1 - cover[i] * .9;                                             // the curtain dims what passes
-      const mullion = Math.abs((x0 + x1) / 2 - (win.x + win.w / 2)) < win.w / n * .6 ? .35 : 1;
-      const a = .045 * pass * mullion;
+      const pass = 1 - cover[i] * .9; avg += pass / n;                            // the curtain dims what passes
+      const mullion = Math.abs((x0 + x1) / 2 - (win.x + win.w / 2)) < win.w / n * .9 ? .25 : 1;
+      const a = .075 * pass * mullion;
       // volumetric shaft through the room
       const g = ctx.createLinearGradient(0, top, 0, floor);
-      g.addColorStop(0, `rgba(150,172,215,${a})`); g.addColorStop(1, 'rgba(150,172,215,0)');
+      g.addColorStop(0, `rgba(150,172,215,${a})`); g.addColorStop(.7, `rgba(150,172,215,${a * .35})`); g.addColorStop(1, 'rgba(150,172,215,0)');
       ctx.fillStyle = g; ctx.beginPath();
       ctx.moveTo(x0, bottom); ctx.lineTo(x1 + .5, bottom); ctx.lineTo(x1 + shift * 1.1, floor); ctx.lineTo(x0 + shift * 1.1, floor); ctx.fill();
-      // pool of moonlight on the floor, the window's shape skewed across the planks
-      const fy0 = H * .875, fy1 = H * .975, fg = ctx.createLinearGradient(0, fy0, 0, fy1);   // soft penumbra: fades with distance
-      fg.addColorStop(0, `rgba(165,185,225,${.075 * pass * mullion})`); fg.addColorStop(.6, `rgba(165,185,225,${.04 * pass * mullion})`); fg.addColorStop(1, 'rgba(165,185,225,0)');
+      // pool of moonlight on the floor: the window's panes skewed across the planks, split by the transom's shadow
+      const fy0 = H * .875, fy1 = H * .975, fg = ctx.createLinearGradient(0, fy0, 0, fy1);
+      fg.addColorStop(0, `rgba(170,190,228,${.11 * pass * mullion})`); fg.addColorStop(.6, `rgba(170,190,228,${.055 * pass * mullion})`); fg.addColorStop(1, 'rgba(170,190,228,0)');
       ctx.fillStyle = fg;
-      ctx.beginPath(); ctx.moveTo(x0 + shift * .8, fy0); ctx.lineTo(x1 + shift * .8 + .5, fy0); ctx.lineTo(x1 + shift * 1.2, fy1); ctx.lineTo(x0 + shift * 1.2, fy1); ctx.fill();
+      const quad = (ta, tb) => {
+        const ya = fy0 + (fy1 - fy0) * ta, yb = fy0 + (fy1 - fy0) * tb, sa = shift * (.8 + .4 * ta), sb = shift * (.8 + .4 * tb);
+        ctx.beginPath(); ctx.moveTo(x0 + sa, ya); ctx.lineTo(x1 + sa + .5, ya); ctx.lineTo(x1 + sb + .5, yb); ctx.lineTo(x0 + sb, yb); ctx.fill();
+      };
+      quad(0, .44); quad(.54, 1);
+    }
+    // moonlight bouncing off the wall around the window, and its blurred reflection on the varnished floor
+    const cx = win.x + win.w / 2, cy = win.y + win.h / 2;
+    const wg = ctx.createRadialGradient(cx, cy, win.w * .35, cx, cy, win.w * 1.5);
+    wg.addColorStop(0, `rgba(110,128,170,${.07 * avg})`); wg.addColorStop(1, 'rgba(110,128,170,0)');
+    ctx.fillStyle = wg; ctx.fillRect(cx - win.w * 1.5, cy - win.w * 1.5, win.w * 3, win.w * 3);
+    const fl = H * .86, rg = ctx.createLinearGradient(0, fl, 0, H);
+    rg.addColorStop(0, `rgba(150,170,210,${.06 * avg})`); rg.addColorStop(1, 'rgba(150,170,210,0)');
+    ctx.fillStyle = rg; ctx.fillRect(win.x + win.w * .08, fl, win.w * .84, H - fl);
+    // dust drifting through the beams, lit only where the light reaches it
+    for (const m of motes) {
+      if (!reduce) { m.x += Math.sin(t * .0003 + m.ph) * .07; m.y += m.v; if (m.y > floor) { m.y = bottom; m.x = win.x - win.w * .55 + Math.random() * win.w * 1.5; } }
+      const tt = (m.y - bottom) / (floor - bottom), sx = m.x - shift * 1.1 * tt, i = Math.floor((sx - win.x) / win.w * n);
+      if (i < 0 || i >= n) continue;
+      const a = (1 - cover[i] * .92) * (1 - tt) * .55 * m.b * (.6 + .4 * Math.sin(t * .002 + m.ph));
+      if (a < .02) continue;
+      ctx.fillStyle = `rgba(205,218,245,${a})`; ctx.beginPath(); ctx.arc(m.x, m.y, m.s * .5, 0, 7); ctx.fill();
     }
     ctx.restore();
   }
@@ -420,6 +459,7 @@
     ctx.fillStyle = rg; ctx.fillRect(rod.x0 - 12, rod.y - 3.5, rod.x1 - rod.x0 + 24, 7);
     ctx.fillStyle = '#1a1714'; [rod.x0 - 14, rod.x1 + 14].forEach(x => { ctx.beginPath(); ctx.arc(x, rod.y, 6, 0, 7); ctx.fill(); });
 
+    if (G) { renderGL(); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(gcv, 0, 0); ctx.restore(); } else {
     if (fab.width !== cv.width || fab.height !== cv.height) { fab.width = cv.width; fab.height = cv.height; }
     fctx.setTransform(dpr, 0, 0, dpr, 0, 0); fctx.clearRect(0, 0, W, H);
     const reach = win.w * .6, L = new Float32Array(ROWS * COLS);
@@ -459,6 +499,7 @@
       for (let c = 0; c < COLS; c++) { const p = at(ROWS - 4, c); c ? fctx.lineTo(p.x, p.y) : fctx.moveTo(p.x, p.y); } fctx.stroke();
     }
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = .78; ctx.drawImage(fab, 0, 0); ctx.restore();
+    }
 
     // light leaking round the fabric's edges where they cross the window
     // Only edges that border open glass leak light (not where the panels overlap each other).
@@ -499,6 +540,142 @@
       gg.addColorStop(0, 'rgba(200,50,58,.3)'); gg.addColorStop(1, 'rgba(200,50,58,0)');
       ctx.fillStyle = gg; ctx.fillRect(grabbed.x - 40, grabbed.y - 40, 80, 80);
     }
+  }
+
+  // ---------- fabric in WebGL: real per-pixel normals, light transmitted through the weave ----------
+  // Depth comes from gathering: a segment shorter than its rest width must have turned in z, alternating into pleats.
+  // What shines through is a blurred copy of the real scene behind (sky, moon, frame and mullion shadows), attenuated
+  // by the light's path length in the fabric, so fold walls seen edge-on go dark exactly like a backlit curtain.
+  const gcv = document.createElement('canvas');
+  const gl = gcv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  let G = null;
+  const PLEAT = 1.6;
+  const VS = `attribute vec2 aP; attribute vec3 aN; attribute vec3 aT; uniform vec2 uRes;
+    varying vec3 vN; varying vec2 vUV; varying vec2 vP; varying float vAO;
+    void main(){ vN = aN; vUV = aT.xy; vAO = aT.z; vP = aP; gl_Position = vec4(aP.x / uRes.x * 2. - 1., 1. - aP.y / uRes.y * 2., 0., 1.); }`;
+  const FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
+    precision mediump float;
+    #endif
+    varying vec3 vN; varying vec2 vUV; varying vec2 vP; varying float vAO;
+    uniform sampler2D uBack; uniform vec2 uView; uniform vec2 uThreads; uniform float uHem;
+    float h(float n){ return fract(sin(n * 12.9898) * 43758.5453); }
+    float vn(float x){ float i = floor(x), f = fract(x); return mix(h(i), h(i + 1.), f * f * (3. - 2. * f)); }
+    void main(){
+      vec3 n = normalize(vN); float facing = clamp(abs(n.z), 0., 1.);
+      vec2 t = vUV * uThreads;                                     // linen: warp, weft and irregular slub threads, carried by the cloth
+      float weave = vn(t.x * .5) * .8 + vn(t.y * .5 + 31.) * .2;
+      float slub = vn(floor(t.x * .35) * 7.13 + t.y * .02) * .9 + vn(t.y * .03 + t.x * .004) * .1;
+      float hem = step(uHem, vUV.y) + step(vUV.x, .012) + step(.988, vUV.x);
+      float dens = 1.0 + .45 * slub - .1 * weave + hem * .9;
+      float path = 1. / max(facing, .1);                            // oblique fabric = longer path through it
+      vec3 back = texture2D(uBack, vP / uView).rgb;
+      back = mix(vec3(dot(back, vec3(.3, .55, .15))), back, .55);     // dense linen scatters and mutes the colour behind it
+      vec3 trans = back * exp(-dens * path * .95) * vec3(1., .965, .91) * 5.2;
+      vec3 L = normalize(vec3(-.35, .5, .8));                       // faint room light from the front, floor bounce from below
+      vec3 front = vec3(.05, .052, .058) * (.35 + .65 * max(dot(n, L), 0.)) + vec3(.012, .013, .016) * max(n.y, 0.);
+      float sheen = pow(1. - facing, 3.);                           // fibres catch the window light on fold crests
+      vec3 col = (trans + front + back * sheen * .18) * (1. - vAO * .7) * (.95 + .05 * weave);
+      float a = clamp(.92 + .04 * path + hem, 0., 1.);
+      gl_FragColor = vec4(col * a, a);
+    }`;
+
+  function initGL() {
+    if (!gl) return;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    try {
+      const pr = gl.createProgram();
+      gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr);
+      if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+      const u = k => gl.getUniformLocation(pr, k), at = k => gl.getAttribLocation(pr, k);
+      G = { pr, vb: gl.createBuffer(), ib: gl.createBuffer(), tex: gl.createTexture(), aP: at('aP'), aN: at('aN'), aT: at('aT'),
+            uRes: u('uRes'), uView: u('uView'), uBack: u('uBack'), uThreads: u('uThreads'), uHem: u('uHem') };
+    } catch (e) { console.warn('attic: WebGL fabric unavailable, using 2D', e); G = null; }
+  }
+
+  function buildBacklight() {                                     // what the fabric is lit by: the scene behind it, diffused
+    if (!G) return;
+    let c0 = mk(W / 2, H / 2); const c = c0.getContext('2d'); c.scale(.5, .5);
+    c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+    c.save(); winPath(c); c.clip(); c.drawImage(skyCan, win.x, win.y, win.w, win.h);
+    const md = moonCan.width / dpr; c.drawImage(moonCan, moon.x - md / 2, moon.y - md / 2, md, md);
+    const g = c.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, moon.r * 6);
+    g.addColorStop(0, 'rgba(230,236,250,.9)'); g.addColorStop(.25, 'rgba(170,185,220,.25)'); g.addColorStop(1, 'rgba(170,185,220,0)');
+    c.fillStyle = g; c.fillRect(moon.x - moon.r * 6, moon.y - moon.r * 6, moon.r * 12, moon.r * 12);
+    c.restore();
+    c.globalCompositeOperation = 'destination-out'; c.drawImage(frameCan, 0, 0, W, H); c.globalCompositeOperation = 'destination-over';
+    c.fillStyle = '#000'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';   // frame and mullions cast a shadow onto the curtain
+    while (c0.width > W / 20) { const nx = mk(c0.width / 2, c0.height / 2); nx.getContext('2d').drawImage(c0, 0, 0, nx.width, nx.height); c0 = nx; }
+    for (let k = 0; k < 2; k++) {                                   // up and down again: bilinear passes smooth away the blockiness
+      const up = mk(c0.width * 2, c0.height * 2), uc = up.getContext('2d'); uc.imageSmoothingQuality = 'high'; uc.drawImage(c0, 0, 0, up.width, up.height);
+      const dn = mk(c0.width, c0.height); dn.getContext('2d').drawImage(up, 1, 1, up.width - 2, up.height - 2, 0, 0, dn.width, dn.height); c0 = dn;
+    }
+    const fin = mk(c0.width * 4, c0.height * 4), fc = fin.getContext('2d'); fc.imageSmoothingQuality = 'high'; fc.drawImage(c0, 0, 0, fin.width, fin.height);
+    backCan = fin;
+  }
+
+  function buildGLMesh() {
+    if (!G) return;
+    gcv.width = cv.width; gcv.height = cv.height;
+    G.data = new Float32Array(P.length * 8); G.z = new Float32Array(P.length); G.z2 = new Float32Array(P.length);
+    const idx = [];
+    for (let panel = 0; panel < 2; panel++) {
+      const b = panel * ROWS * COLS;
+      for (let r = 0; r < ROWS - 1; r++) for (let c = 0; c < COLS - 1; c++) { const i = b + r * COLS + c; idx.push(i, i + 1, i + COLS, i + 1, i + COLS + 1, i + COLS); }
+    }
+    G.count = idx.length;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, G.vb); gl.bufferData(gl.ARRAY_BUFFER, G.data.byteLength, gl.DYNAMIC_DRAW);
+    gl.bindTexture(gl.TEXTURE_2D, G.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, backCan);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const pw = restW * (COLS - 1), ph = P[ROWS * COLS - 1].y - rod.y;
+    G.threads = [pw / 2.2, ph / 2.2];
+  }
+
+  function renderGL() {
+    const d = G.data, z = G.z, z2 = G.z2;
+    for (let panel = 0; panel < 2; panel++) {
+      const b = panel * ROWS * COLS;
+      for (let r = 0; r < ROWS; r++) {                              // depth across each row from how much it is gathered
+        let acc = 0; z[b + r * COLS] = 0;
+        for (let c = 0; c < COLS - 1; c++) {
+          const p = P[b + r * COLS + c], q = P[b + r * COLS + c + 1], dd = Math.hypot(q.x - p.x, q.y - p.y);
+          acc += Math.sqrt(Math.max(0, restW * restW - dd * dd)) * Math.sin(Math.PI * (c + .5) / PLEAT);
+          z[b + r * COLS + c + 1] = acc;
+        }
+      }
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {   // smooth down the cloth so rows agree
+        const i = b + r * COLS + c, ru = Math.max(0, r - 1), rd = Math.min(ROWS - 1, r + 1);
+        z2[i] = (z[b + ru * COLS + c] + 2 * z[i] + z[b + rd * COLS + c]) / 4;
+      }
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        const i = b + r * COLS + c, cl = Math.max(0, c - 1), cr = Math.min(COLS - 1, c + 1), ru = Math.max(0, r - 1), rd = Math.min(ROWS - 1, r + 1);
+        const A = P[b + r * COLS + cl], B = P[b + r * COLS + cr], U = P[b + ru * COLS + c], D = P[b + rd * COLS + c];
+        const ux = B.x - A.x, uy = B.y - A.y, uz = z2[b + r * COLS + cr] - z2[b + r * COLS + cl];
+        const vx = D.x - U.x, vy = D.y - U.y, vz = z2[b + rd * COLS + c] - z2[b + ru * COLS + c];
+        let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const l = Math.hypot(nx, ny, nz) || 1; if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        const ao = Math.min(1, Math.max(0, ((z2[b + r * COLS + cl] + z2[b + r * COLS + cr]) / 2 - z2[i]) / restW * 2));   // crease valleys
+        const o = i * 8, p = P[i];
+        d[o] = p.x; d[o + 1] = p.y; d[o + 2] = nx / l; d[o + 3] = ny / l; d[o + 4] = nz / l;
+        d[o + 5] = c / (COLS - 1); d[o + 6] = r / (ROWS - 1); d[o + 7] = ao;
+      }
+    }
+    if (gcv.width !== cv.width || gcv.height !== cv.height) { gcv.width = cv.width; gcv.height = cv.height; }
+    gl.viewport(0, 0, gcv.width, gcv.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(G.pr);
+    gl.bindBuffer(gl.ARRAY_BUFFER, G.vb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, d);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.ib);
+    gl.enableVertexAttribArray(G.aP); gl.vertexAttribPointer(G.aP, 2, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(G.aN); gl.vertexAttribPointer(G.aN, 3, gl.FLOAT, false, 32, 8);
+    gl.enableVertexAttribArray(G.aT); gl.vertexAttribPointer(G.aT, 3, gl.FLOAT, false, 32, 20);
+    gl.uniform2f(G.uRes, W, H); gl.uniform2f(G.uView, W, H); gl.uniform2f(G.uThreads, G.threads[0], G.threads[1]); gl.uniform1f(G.uHem, 1 - 3.5 / (ROWS - 1));
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, G.tex); gl.uniform1i(G.uBack, 0);
+    gl.drawElements(gl.TRIANGLES, G.count, gl.UNSIGNED_SHORT, 0);
   }
 
   // ---------- sound ----------
@@ -637,7 +814,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawSky(t);
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(frameCan, 0, 0); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawLight(); drawCurtain();
+    drawLight(t); drawCurtain();
     ctx.drawImage(vigCan, 0, 0, W, H);
     // photographic grain over the whole frame (keeps the dark gradients from banding)
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = .09;
@@ -646,6 +823,7 @@
   }
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }, { rootMargin: '200px' }).observe(sec);
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 250); });
+  initGL();
   layout();
   requestAnimationFrame(frame);
 })();
