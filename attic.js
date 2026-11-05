@@ -325,12 +325,12 @@
       const breeze = w * wind * k * (1 + .4 * Math.sin(t * .0003 + p.panel * 3));   // travelling ripples, stronger towards the hem
       p.x += vx + breeze; p.y += vy + .42 * p.m - Math.abs(w) * wind * k * .25;     // the draught lifts the hem a little
     }
-    for (let k = 0; k < 12; k++) {
+    for (let k = 0, it = grabbed ? 20 : 12; k < it; k++) {
       for (const [a, b, rest] of C) {
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || .001;
         if (d <= rest) continue;                                                   // resists stretch, folds freely
         const f = (d - rest) / d;
-        const ma = a === grabbed ? 0 : 1 / a.m, mb = b === grabbed ? 0 : 1 / b.m, s = ma + mb || 1;
+        const ma = a === grabbed ? .12 : 1 / a.m, mb = b === grabbed ? .12 : 1 / b.m, s = ma + mb || 1;   // held point is heavy, not immovable
         a.x += dx * f * ma / s; b.x -= dx * f * mb / s;
         if (!a.ring) a.y += dy * f * ma / s;
         if (!b.ring) b.y -= dy * f * mb / s;
@@ -502,9 +502,9 @@
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = .78; ctx.drawImage(fab, 0, 0); ctx.restore();
     }
 
-    // light leaking round the fabric's edges where they cross the window (2D fallback only)
+    // light leaking round the fabric's edges where they cross the window
     // Only edges that border open glass leak light (not where the panels overlap each other).
-    if (!G) {
+    {
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'butt';
     // glow = a wide faint stroke under a thin bright one (cheaper than shadowBlur)
     const span = [0, 1].map(panel => Array.from({ length: ROWS }, (_, r) => {
@@ -524,10 +524,10 @@
         const ox = mx + nx * 10, [lo, hi] = other[Math.min(ROWS - 1, p.r)];
         if (!ny && ox > lo && ox < hi) continue;                                  // the other panel covers this side
         if (inWindow(ox, my + ny * 10) < .05) continue;                           // nothing but frame/wall beyond it
-        const a = .28 * w * (.3 + .7 * Math.exp(-Math.hypot(mx - moon.x, my - moon.y) / (win.w * .7)));
+        const a = (G ? .17 : .28) * w * (.3 + .7 * Math.exp(-Math.hypot(mx - moon.x, my - moon.y) / (win.w * .7)));
         ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
-        ctx.lineWidth = 9; ctx.strokeStyle = `rgba(150,180,240,${a * .22})`; ctx.stroke();
-        ctx.lineWidth = 1.8; ctx.strokeStyle = `rgba(195,212,248,${a})`; ctx.stroke();
+        ctx.lineWidth = 7; ctx.strokeStyle = `rgba(150,180,240,${a * .25})`; ctx.stroke();
+        ctx.lineWidth = 1.3; ctx.strokeStyle = `rgba(195,212,248,${a})`; ctx.stroke();
       }
     }
     ctx.restore();
@@ -823,13 +823,18 @@
   cv.addEventListener('pointercancel', release);
 
   // ---------- loop ----------
+  const DT = 1000 / 60; let lastT = 0, acc = 0, simT = 0;
   function frame(t) {
     requestAnimationFrame(frame);
-    if (!visible) return;
+    if (!visible) { lastT = 0; return; }
     const v = Math.hypot(gx - lastX, gy - lastY); lastX = gx; lastY = gy;
     speed += ((grabbed ? v : 0) - speed) * .3;
-    gust *= .992;                                                                // the first draught dies down over a few seconds
-    step(t); updateSound(); measureCover();
+    // fixed 60 Hz physics: the cloth weighs and swings the same on 60, 120 and 144 Hz screens and on slow phones
+    acc += lastT ? Math.min(t - lastT, 100) : DT; lastT = t;
+    let n = 0;
+    while (acc >= DT && n < 4) { gust *= .992; step(simT); simT += DT; acc -= DT; n++; }   // the first draught dies down over a few seconds
+    if (n === 4) acc = 0;
+    updateSound(); measureCover();
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCan, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawSky(t);
