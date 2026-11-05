@@ -382,6 +382,161 @@
   }
 
   // ---------- per-frame drawing ----------
+
+  // ---------- the cat ----------
+  // After 9 s of playing with the curtain a cat jumps up onto the ledge outside, looks around, presses a paw to the
+  // glass (it leaves a fogged print that fades), then hops off. It comes back every 90 s while the attic is in view.
+  // Drawn as a backlit silhouette: dark body, a rim of moon/sky light on its upper edges, eyes catching the light.
+  let cat = null, catClock = 0, playT = 0, nextCat = null, catLastT = 0, prints = [], catCan = null;
+  const CAT_LEN = 8.8;                                             // seconds on screen
+  const seg = (T, a, b) => T <= a ? 0 : T >= b ? 1 : (T - a) / (b - a);
+  const ease = u => u * u * (3 - 2 * u);
+  function catTick(t) {
+    const dt = catLastT ? Math.min(t - catLastT, 100) : 0; catLastT = t;
+    if (reduce || !built) return;
+    catClock += dt;
+    if (nextCat !== null) nextCat -= dt;                           // 90 s from one arrival to the next
+    if (cat) { if ((catClock - cat.t0) / 1000 > CAT_LEN) cat = null; }
+    else if (nextCat === null) { if (grabbed) playT += dt; if (playT >= 9000) spawnCat(); }
+    else if (nextCat <= 0) spawnCat();
+  }
+  function spawnCat() {
+    // sit where the curtain leaves the glass most open (on either side of the mullion), so it can be seen
+    const n = cover.length, half = Math.max(1, Math.round(n * win.h * .4 * .3 / win.w));   // ~cat half-width in slices
+    let best = 0, bestC = Infinity;
+    for (let i = 0; i < n; i++) {
+      const u = (i + .5) / n; if (u < .2 || (u > .38 && u < .62) || u > .8) continue;
+      let c = 0; for (let j = i - half; j <= i + half; j++) c += cover[Math.min(n - 1, Math.max(0, j))];
+      if (c < bestC - 1e-6) { bestC = c; best = u; }
+    }
+    cat = { t0: catClock, x: win.x + win.w * best, dir: best < .5 ? -1 : 1, taps: 0 };
+    nextCat = 90000;
+    window.track?.('cat');
+  }
+  function catPose(T) {
+    const CS = win.h * .4, P = { x: cat.x, y: win.y + win.h + CS * .03, CS, sx: 1, sy: 1, look: 0, tilt: 0, blink: 0, ear: 0, paw: 0, press: 0, side: cat.dir };
+    let oy = 0, ox = 0;
+    if (T < .75) { const u = T / .75; oy = (1 - u) * 1.15 - .9 * u * (1 - u); P.sx = .93; P.sy = 1.09; }          // the jump up
+    else if (T < .98) { const k = Math.sin(Math.PI * seg(T, .75, .98)); P.sy = 1 - .1 * k; P.sx = 1 + .07 * k; }    // landing
+    if (T > 7.4 && T < 7.75) { const k = Math.sin(Math.PI * seg(T, 7.4, 7.75) * .5); P.sy = 1 - .12 * k; P.sx = 1 + .06 * k; }   // crouch
+    if (T >= 7.75) { const u = seg(T, 7.75, 8.6); oy = -1.2 * u + 3.1 * u * u; ox = cat.dir * .7 * u; P.sy = 1.07; P.sx = .94; }  // hop off
+    P.x += ox * CS; P.y += oy * CS;
+    P.look = -ease(seg(T, 1.2, 1.55)) + 1.8 * ease(seg(T, 2.2, 2.6)) - .8 * ease(seg(T, 3.0, 3.3)) + cat.dir * ease(seg(T, 6.8, 7.2));
+    P.tilt = .15 * ease(seg(T, 4.45, 4.8)) - .15 * ease(seg(T, 6.1, 6.4));
+    for (const tb of [1.95, 3.45, 5.7]) P.blink = Math.max(P.blink, 1 - Math.abs(T - tb) / .09);
+    P.ear = Math.exp(-(((T - 2.75) / .06) ** 2)) + Math.exp(-(((T - 5.1) / .05) ** 2));
+    P.paw = ease(seg(T, 3.9, 4.35)) - ease(seg(T, 6.15, 6.6));
+    const repress = Math.sin(Math.PI * seg(T, 5.15, 5.5));         // lifts the paw a little and presses again
+    P.press = P.paw > .98 ? 1 - .75 * repress : 0;
+    P.tail = T;
+    return P;
+  }
+  // the silhouette in unit space: feet on y = 0, ear tips near y = -1
+  function catShape(c, P, fill) {
+    const hx = P.look * .035, hy = -.74, s = P.side;
+    c.fillStyle = c.strokeStyle = fill; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath();
+    c.ellipse(0, -.17, .29, .17, 0, 0, 7);                                          // haunches
+    c.moveTo(-.25, -.2); c.bezierCurveTo(-.27, -.42, -.17, -.58, -.09, -.65);         // body to the neck
+    c.lineTo(.09, -.65); c.bezierCurveTo(.17, -.58, .27, -.42, .25, -.2); c.closePath();
+    c.moveTo(.17, -.38); c.ellipse(0, -.38, .17, .2, 0, 0, 7);                         // chest
+    c.fill();
+    c.save(); c.translate(hx, hy); c.rotate(P.tilt);
+    c.beginPath(); c.ellipse(0, 0, .155, .13, 0, 0, 7); c.moveTo(.163, .03); c.ellipse(0, .03, .163, .1, 0, 0, 7); c.fill();   // head, cheeks
+    for (const e of [-1, 1]) {                                                       // ears
+      const tw = e === 1 ? P.ear * .04 : 0, turn = P.look * .02;
+      c.beginPath(); c.moveTo(e * .148, -.02); c.quadraticCurveTo(e * .16 + turn, -.16, e * .128 + turn + tw * e, -.235 + tw);
+      c.quadraticCurveTo(e * .09 + turn, -.17, e * .035, -.112); c.closePath(); c.fill();
+    }
+    c.restore();
+    // front legs; the raised one reaches for the glass
+    c.lineWidth = .075;
+    for (const e of [-1, 1]) {
+      if (e === s && P.paw > 0) continue;
+      c.beginPath(); c.moveTo(e * .075, -.42); c.lineTo(e * .078, -.03); c.stroke();
+      c.beginPath(); c.ellipse(e * .08, -.025, .05, .03, 0, 0, 7); c.fill();
+    }
+    if (P.paw > 0) {
+      const px = s * (.075 + .085 * P.paw), py = -.03 - .6 * P.paw, r = .048 * (1 + .6 * P.paw);   // closer to the glass, so bigger
+      c.lineWidth = .078 + .03 * P.paw; c.beginPath(); c.moveTo(s * .08, -.44); c.quadraticCurveTo(s * (.12 + .07 * P.paw), -.36, px, py); c.stroke();
+      c.beginPath(); c.ellipse(px, py, r * (1 + .08 * P.press), r * (1 - .05 * P.press), 0, 0, 7); c.fill();
+      P.pawAt = [px, py, r];
+    }
+    // tail: lies along the ledge, the tip sways and curls
+    const w = Math.sin(P.tail * 2.1) * .6 + Math.sin(P.tail * 3.7 + 1) * .4, tx = -s;
+    c.lineWidth = .06; c.beginPath(); c.moveTo(tx * .2, -.05);
+    c.bezierCurveTo(tx * .4, -.01, tx * (.52 + w * .04), -.08, tx * (.47 + w * .1), -.26 - Math.abs(w) * .06); c.stroke();
+  }
+  function drawCat() {
+    if (!cat) return;
+    const T = (catClock - cat.t0) / 1000, P = catPose(T), CS = P.CS;
+    const cw = Math.ceil(CS * 1.6), ch = Math.ceil(CS * 1.25), ox = cw / 2, oy = CS * 1.08;
+    if (!catCan || catCan.width !== Math.ceil(cw * dpr) || catCan.height !== Math.ceil(ch * dpr)) catCan = mk(cw * dpr, ch * dpr);
+    const c = catCan.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, catCan.width, catCan.height);
+    const place = (dx, dy) => { c.setTransform(dpr * CS * P.sx, 0, 0, dpr * CS * P.sy, dpr * (ox + dx), dpr * (oy + dy)); };
+    // rim light (moon and sky are up and to the right), then the body over it shifted away from the light
+    const sh = Math.max(1.2, CS * .007);
+    c.globalCompositeOperation = 'source-over';
+    place(0, 0); catShape(c, P, 'rgb(118,118,138)');
+    c.shadowBlur = 0; c.globalCompositeOperation = 'source-atop';
+    place(-sh, sh * .85); catShape(c, P, '#08080b');
+    // the form: a little sky light on the top of the head and shoulders, warm city bounce from below
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let g = c.createRadialGradient(ox + CS * .15, oy - CS * .95, 0, ox + CS * .15, oy - CS * .95, CS * .7);
+    g.addColorStop(0, 'rgba(120,128,155,.22)'); g.addColorStop(1, 'rgba(120,128,155,0)'); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
+    g = c.createLinearGradient(0, oy - CS * .35, 0, oy); g.addColorStop(0, 'rgba(120,80,60,0)'); g.addColorStop(1, 'rgba(120,80,60,.14)'); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
+    c.globalAlpha = .045; c.fillStyle = c.createPattern(grainCan, 'repeat'); c.fillRect(0, 0, cw, ch); c.globalAlpha = 1;   // fur
+    c.globalCompositeOperation = 'destination-over'; c.shadowColor = 'rgba(8,8,11,.85)'; c.shadowBlur = 2 * dpr;   // soft fur edge, behind the rim
+    place(0, 0); catShape(c, P, 'rgba(8,8,11,.6)');
+    c.shadowBlur = 0; c.globalCompositeOperation = 'source-over';
+    ctx.filter = 'blur(.5px)'; ctx.drawImage(catCan, P.x - ox, P.y - oy, cw, ch); ctx.filter = 'none';   // fur is never a hard edge
+    const U = (ux, uy) => [P.x + ux * CS * P.sx, P.y + uy * CS * P.sy];
+    // eyes catch the light; they narrow and slide as the head turns, and blink
+    const hx = P.look * .035, open = (1 - P.blink) * (T > .5 && T < 8 ? 1 : 0);
+    if (open > .05) for (const e of [-1, 1]) {
+      const vis = 1 - Math.max(0, e * P.look) * .55;
+      const [ex, ey] = U(hx + e * .056 + P.look * .02, -.745 + e * P.tilt * .05);
+      ctx.save(); ctx.translate(ex, ey); ctx.rotate(P.tilt - e * .18);
+      ctx.fillStyle = `rgba(190,205,120,${.5 * vis})`; ctx.beginPath(); ctx.ellipse(0, 0, CS * .028 * vis, CS * .017 * open, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(20,22,10,${.8 * vis})`; ctx.beginPath(); ctx.ellipse(P.look * CS * .006, 0, CS * .006, CS * .015 * open, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,240,${.7 * vis})`; ctx.fillRect(CS * .008, -CS * .007 * open, 1.2, 1.2);
+      ctx.restore();
+    }
+    // the paw on the glass: pads flatten against it and show
+    if (P.press > 0 && P.pawAt) {
+      const [px, py] = U(P.pawAt[0], P.pawAt[1]), k = CS * P.pawAt[2] * P.sx, a = P.press;
+      const pads = c2 => {
+        c2.beginPath(); c2.ellipse(px, py + k * .26, k * .38, k * .28, 0, 0, 7); c2.fill();
+        for (const [dx, dy] of [[-.46, -.2], [-.16, -.44], [.16, -.44], [.46, -.2]]) { c2.beginPath(); c2.ellipse(px + dx * k, py + dy * k, k * .14, k * .17, dx * .5, 0, 7); c2.fill(); }
+      };
+      ctx.save(); ctx.shadowColor = `rgba(70,52,58,${.8 * a})`; ctx.shadowBlur = 2;
+      ctx.fillStyle = `rgba(74,56,62,${.95 * a})`; pads(ctx); ctx.restore();
+      ctx.save(); ctx.translate(k * .05, -k * .06); ctx.fillStyle = `rgba(150,140,160,${.18 * a})`; ctx.scale(1, 1); pads(ctx); ctx.restore();   // sheen on the pads
+      if (a > .9 && cat.taps < (T > 5.3 ? 2 : 1)) { cat.taps++; prints.length = 0; prints.push({ x: px, y: py, k, t0: catClock, owner: cat }); tapGlass(); }
+    }
+  }
+  function drawPrints() {                                          // fogged paw prints on the glass, fading
+    prints = prints.filter(p => catClock - p.t0 < 15000);
+    for (const p of prints) {
+      if (p.owner === cat && cat && catPose((catClock - cat.t0) / 1000).paw > .2) { p.t0 = catClock; continue; }   // still under the paw
+      const age = (catClock - p.t0) / 15000, a = .13 * Math.min(1, age * 40) * (1 - age);
+      ctx.save(); ctx.shadowColor = `rgba(205,215,238,${a})`; ctx.shadowBlur = 5; ctx.fillStyle = `rgba(205,215,238,${a})`;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + p.k * .28, p.k * .5, p.k * .38, 0, 0, 7); ctx.fill();
+      for (const [dx, dy] of [[-.5, -.22], [-.18, -.5], [.18, -.5], [.5, -.22]]) { ctx.beginPath(); ctx.ellipse(p.x + dx * p.k, p.y + dy * p.k, p.k * .19, p.k * .22, dx * .5, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
+  }
+  function tapGlass() {                                            // a soft knock on the pane, if the sound is on
+    const ac = S.ac; if (!ac || ac.state !== 'running') return;
+    const len = Math.floor(ac.sampleRate * .06), b = ac.createBuffer(1, len, ac.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 6);
+    const src = ac.createBufferSource(); src.buffer = b;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 3;
+    const g = ac.createGain(); g.gain.value = .35;
+    src.connect(f); f.connect(g); g.connect(S.bus); src.start();
+  }
+
   function drawSky(t) {
     ctx.save(); winPath(ctx); ctx.clip();
     ctx.drawImage(skyCan, win.x, win.y, win.w, win.h);
@@ -419,7 +574,9 @@
         shoot.x += 7; shoot.y += 2.5; shoot.life -= .04; if (shoot.life <= 0) shoot = null;
       }
     }
+    drawCat();
     ctx.drawImage(glassCan, win.x, win.y, win.w, win.h);
+    drawPrints();
     for (const d of drops) {                                                      // drops running down the glass
       if (!reduce) { d.y += d.v; if (d.y > win.y + win.h) { d.y = win.y - 10; d.x = win.x + Math.random() * win.w; } }
       const g = ctx.createLinearGradient(d.x, d.y - d.l, d.x, d.y);
@@ -913,7 +1070,7 @@
     // smooth even when a frame gets 0 or 2 physics steps (60 Hz timing jitter) and on 90/120/144 Hz screens.
     const k = acc / DT;
     for (let i = 0; i < P.length; i++) { const p = P[i]; p.sx = p.x; p.sy = p.y; p.x = p.px + (p.x - p.px) * k; p.y = p.py + (p.y - p.py) * k; }
-    updateSound(); measureCover();
+    updateSound(); measureCover(); catTick(t);
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCan, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawSky(t);
